@@ -80,11 +80,47 @@ DATA_SECTION
 	init_int nsex;		// number of sexes
 	init_int nshell;	// number of shell conditions
 	init_int nmature;	// number of maturity types
-	init_int nclass;	// number of size-classes
+	init_int nclass;	// number of size-classes in the model
+  init_int ndclass; // number of size-classes in the data
 
 	init_vector size_breaks(1,nclass+1);
 	vector       mid_points(1,nclass);
 	!! mid_points = size_breaks(1,nclass) + first_difference(size_breaks);
+
+  // Initialize class-link matrix and fill as necessary:
+  matrix class_link(1,nclass,1,2);      ///< Matrix of links between model and data size-classes
+  
+  // If number of data classes is not equal to, nor a factor of model classes, then read class link matrix from data file.
+  LOC_CALCS  
+    double class_div = double(ndclass)/double(nclass);
+
+    if(class_div%1 != 0)
+    {
+      *(ad_comm::global_datafile) >> class_link;
+    }
+    // Otherwise, fill each column of class link matrix with sequential numbers.
+    else
+    {
+      // Links are 1:1 when ndclass is equal to nclass:
+      if(class_div = 1)
+      {
+        ivector class_link_col(1,nclass);       
+        class_link_col.fill_seqadd(1,1);    
+        class_link.colfill(1,class_link_col);
+        class_link.colfill(2,class_link_col);
+      } 
+      // Else, links are function of the number of data vs. model classes:
+      else
+      {
+        ivector class_link_col_a(1,nclass);       
+        ivector class_link_col_b(1,nclass);
+        class_link_col_a.fill_seqadd(1,class_div);    
+        class_link_col_b.fill_seqadd(class_div,class_div);
+        class_link.colfill(1,class_link_col_a);
+        class_link.colfill(2,class_link_col_b); 
+      }
+    }
+  END_CALCS
 
 	// |-----------|
 	// | ALLOMETRY |
