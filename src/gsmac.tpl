@@ -1,7 +1,7 @@
 // ==================================================================================== //
 //   Gmacs: Generalized Modeling for Alaskan Crab Stocks.
 //
-//   Authors: Athol Whitten and Jim Ianelli
+//   Authors: Athol Whitten, Jim Ianelli, Steven Martell
 //            University of Washington, Seattle
 //            and Alaska Fisheries Science Centre, NOAA, Seattle
 //
@@ -12,7 +12,6 @@
 //   were adapted from code developed for the NPFMC by Andre Punt (2012), 
 //   and on the 'LSMR' model by Steven Martell (2011).
 //
-//  NOTE: This is current development version. As at 6pm Seattle time, June 6th 2014.
 //
 //  INDEXES:
 //    g = group
