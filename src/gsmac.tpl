@@ -46,9 +46,11 @@ GLOBALS_SECTION
 	 *
 	 * \def COUT(object)
 	 * Prints object to screen during runtime.
+	 * cout <<setw(6) << setprecision(3) << setfixed() << x << endl;
 	 */
 	 #undef COUT
-	 #define COUT(object) cout << #object "\n" << object << endl;
+	 #define COUT(object) cout << #object "\n" << setw(6) \
+	 << setprecision(3) << setfixed() << object << endl;
 
 TOP_OF_MAIN_SECTION
 	time(&start);
@@ -57,6 +59,7 @@ TOP_OF_MAIN_SECTION
 	gradient_structure::set_CMPDIF_BUFFER_SIZE(1.e7);
 	gradient_structure::set_MAX_NVAR_OFFSET(5000);
 	gradient_structure::set_NUM_DEPENDENT_VARIABLES(5000);
+	gradient_structure::set_MAX_DLINKS(50000);
 
 DATA_SECTION
 	// |------------------------|
@@ -155,18 +158,27 @@ DATA_SECTION
 	// |----------------------------|
 	// | RELATIVE ABUNDANCE INDICES |
 	// |----------------------------|
-	init_int nSurveyRows;
-	init_matrix dSurveyData(1,nSurveyRows,1,6);
+	init_int nSurveys;
+	init_ivector nSurveyRows(1,nSurveys);
+	init_3darray dSurveyData(1,nSurveys,1,nSurveyRows,1,7);
+	matrix obs_cpue(1,nSurveys,1,nSurveyRows);
+	matrix  cpue_cv(1,nSurveys,1,nSurveyRows);
+	LOC_CALCS
+		for(int k = 1; k <= nSurveys; k++ )
+		{
+			obs_cpue(k) = column(dSurveyData(k),5);
+			 cpue_cv(k) = column(dSurveyData(k),6);
+		}
+	END_CALCS
 
 
 
 
-
-
-
-
-
-
+	// |------------------|
+	// | END OF DATA FILE |
+	// |------------------|
+	init_int eof;
+	!! if (eof != 9999) {cout<<"Error reading data"<<endl; exit(1);}
 
 
 
@@ -185,6 +197,7 @@ DATA_SECTION
 	// | LEADING PARAMETER CONTROLS |
 	// |----------------------------|
 	init_int ntheta;
+	ivector junk(1,ntheta);
 	init_matrix theta_control(1,ntheta,1,7);
 	vector theta_ival(1,ntheta);
 	vector theta_lb(1,ntheta);
@@ -195,6 +208,7 @@ DATA_SECTION
 		theta_lb   = column(theta_control,2);
 		theta_ub   = column(theta_control,3);
 		theta_phz  = ivector(column(theta_control,4));
+		junk = 1;
 	END_CALCS
 	
 
@@ -267,28 +281,29 @@ DATA_SECTION
 	END_CALCS
 
 	!! cout<<"end of control section"<<endl;
-	
+	!! COUT(theta_ival);
 
 INITIALIZATION_SECTION
-	//theta theta_ival;
-	alpha     3.733;
-	beta      0.2;
-	scale    50.1;
+  theta theta_ival;
+  alpha     3.733;
+  beta      0.2;
+  scale    50.1;
  	
 
 PARAMETER_SECTION
-
+	!! cout<<"'here we are'"<<endl;
 	// Leading parameters
 	//      M = theta(1)
 	// ln(Ro) = theta(2)
 	// ra     = theta(3)
 	// rbeta  = theta(4)
+	
 	init_bounded_number_vector theta(1,ntheta,theta_lb,theta_ub,theta_phz);
 
 	// Molt increment parameters
-	init_bounded_vector alpha(1,nsex,0,100,1);
-	init_bounded_vector beta(1,nsex,0,10,1);
-	init_bounded_vector scale(1,nsex,1,100,1);
+	init_bounded_vector alpha(1,nsex,0,100,-1);
+	init_bounded_vector beta(1,nsex,0,10,-1);
+	init_bounded_vector scale(1,nsex,1,100,-1);
 
 	// Molt probability parameters
 	init_bounded_vector molt_mu(1,nsex,0,200,1);
@@ -312,11 +327,11 @@ PARAMETER_SECTION
 	END_CALCS
 
 	// Fishing mortality rate parameters
-	init_bounded_number_vector log_fbar(1,nfleet,-300.0,30.0,1);
+	init_bounded_number_vector log_fbar(1,nfleet,-300.0,30.0,-1);
 
-	!! for(int k = 1; k <= nfleet; k++) log_fbar(k) = log(0.01);
+	!! for(int k = 1; k <= nfleet; k++) log_fbar(k) = log(0.1);
 	!! ivector f_phz(1,nfleet);
-	!! f_phz = 1;
+	!! f_phz = -2;
 	!! ivector isyr(1,nfleet);
 	!! isyr = syr;
 	!! ivector inyr(1,nfleet);
@@ -326,17 +341,22 @@ PARAMETER_SECTION
 	
 	objective_function_value objfun;
 
-	number M0;				// natural mortality rate
-	number logRbar;			// logarithm of unfished recruits
-	number ra;				// shape parameter for recruitment distribution
-	number rbeta;			// rate parameter for recruitment distribution
+	number M0;				///> natural mortality rate
+	number logRbar;			///> logarithm of unfished recruits
+	number ra;				///> shape parameter for recruitment distribution
+	number rbeta;			///> rate parameter for recruitment distribution
 
-	vector rec_sdd(1,nclass);			// recruitment size_density_distribution
-	vector pre_catch(1,nCatchRows);		// predicted catch from Barnov catch equatoin
-	vector res_catch(1,nCatchRows);		// catch residuals in log-space
+	vector rec_sdd(1,nclass);			///> recruitment size_density_distribution
+	vector survey_q(1,nSurveys);		///> scalers for relative abundance indices (q)
+
+	vector pre_catch(1,nCatchRows);		///> predicted catch from Barnov catch equatoin
+	vector res_catch(1,nCatchRows);		///> catch residuals in log-space
+
+	matrix pre_cpue(1,nSurveys,1,nSurveyRows);	///> predicted relative abundance index
+	matrix res_cpue(1,nSurveys,1,nSurveyRows);	///> relative abundance residuals
 	
-	matrix molt_increment(1,nsex,1,nclass);		// linear molt increment
-	matrix molt_probability(1,nsex,1,nclass); 	// probability of molting
+	matrix molt_increment(1,nsex,1,nclass);		///> linear molt increment
+	matrix molt_probability(1,nsex,1,nclass); 	///> probability of molting
 
 	3darray size_transition(1,nsex,1,nclass,1,nclass);
 	3darray M(1,nsex,syr,nyr,1,nclass);		// Natural mortality
@@ -374,6 +394,7 @@ PROCEDURE_SECTION
 
 	// observation models ...
 	calc_predicted_catch();
+	calc_relative_abundance();
 
 
 
@@ -406,10 +427,10 @@ FUNCTION initialize_model_parameters
    * each sex; assumes there are data to estimate female selex.
    * 
    * Psuedocode:
-   * 	 Loop over each gear:
-   * 	 Create a pointer array with length = number of blocks
-   * 	 Based on slx_type, fill pointer with parameter estimates.
-   * 	 Loop over years and block-in the log_selectivity at mid points.
+   * 	-# Loop over each gear:
+   * 	-# Create a pointer array with length = number of blocks
+   * 	-# Based on slx_type, fill pointer with parameter estimates.
+   * 	-# Loop over years and block-in the log_selectivity at mid points.
    * 	
    */
 FUNCTION calc_selectivities
@@ -585,7 +606,9 @@ FUNCTION calc_size_transition_matrix
 	int h,l,ll;
 	dvariable tmp;
 	dvar_vector psi(1,nclass+1);
+	dvar_matrix At(1,nclass,1,nclass);
 	size_transition.initialize();
+
 
 	for( h = 1; h <= nsex; h++ )
 	{
@@ -597,9 +620,12 @@ FUNCTION calc_size_transition_matrix
 			{
 				psi(ll) = cumd_gamma(size_breaks(ll)/scale(h),tmp);
 			}
-			size_transition(h)(l)(l,nclass)  = first_difference(psi(l,nclass+1));
-			size_transition(h)(l)(l,nclass) /= sum(size_transition(h)(l)(l,nclass));
+			At(l)(l,nclass)  = first_difference(psi(l,nclass+1));
+			At(l)(l,nclass) /= sum(At(l));
+			// size_transition(h)(l)(l,nclass)  = first_difference(psi(l,nclass+1));
+			// size_transition(h)(l)(l,nclass) /= sum(size_transition(h)(l)(l,nclass));
 		}
+		size_transition(h) = trans(At);
 	}
 
 	
@@ -616,8 +642,8 @@ FUNCTION calc_size_transition_matrix
    * @return NULL
    * 
    * todo:  
-   * 		 Add time varying components
-   * 		 Size-dependent mortality
+   * 		- Add time varying components
+   * 		- Size-dependent mortality
    * 
    */
 FUNCTION calc_natural_mortality
@@ -635,11 +661,10 @@ FUNCTION calc_natural_mortality
 
   /**
    * @brief Calculate total instantaneous mortality rate and survival rate
-   * @details S = exp(-Z)
+   * @details \f$ S = exp(-Z) \f$
    * @return NULL
    * 
-   * todo:
-   *  		 Add fishing mortality rate from each fleet.
+   * 
    */
 FUNCTION calc_total_mortality
 	int h;
@@ -650,7 +675,6 @@ FUNCTION calc_total_mortality
 		 Z(h) = M(h) + F(h);
 		 S(h) = mfexp(-Z(h));
 	}
-
 
 
 
@@ -669,7 +693,8 @@ FUNCTION calc_molting_probability
 	{
 		dvariable mu = molt_mu(h);
 		dvariable sd = mu* molt_cv(h);
-		molt_probability(h) = 1.0 - plogis(mid_points,mu,sd);
+		//molt_probability(h) = 1.0 - plogis(mid_points,mu,sd);
+		molt_probability(h) = 1.0 - 1.0/(1+exp((mid_points-mu)/sd));
 	}
 
 
@@ -712,16 +737,41 @@ FUNCTION calc_recruitment_size_distribution
 FUNCTION calc_initial_numbers_at_length
 	int h,i;
 	N.initialize();
+	dmatrix Id=identity_matrix(1,nclass);
 
 	// Option 1: spin up from constant recruitment.
 	dvar_vector rt = 0.5 * mfexp(logRbar) * rec_sdd;
+	
 	for( h = 1; h <= nsex; h++ )
 	{
 		for( i = 1; i <= 50; i++ )
 		{	
-			N(h)(syr) = elem_prod(N(h)(syr),S(h)(syr)) * size_transition(h) + rt;
+			N(h)(syr) = size_transition(h) * elem_prod(N(h)(syr),S(h)(syr)) + rt;
 		}
 	}
+
+
+	// Option 2: equilibrium approach
+	dvar_vector x(1,nclass);
+	dvar_matrix A(1,nclass,1,nclass);
+	for( h = 1; h <= nsex; h++ )
+	{
+		A = size_transition(h);
+		for(int l = 1; l <= nclass; l++ )
+		{
+			A(l) = elem_prod( A(l), S(h)(syr) );
+		}
+
+		
+		x = -solve(A-Id,rt);
+		N(h)(syr) = x;
+	}
+
+	
+	
+
+
+
 
 
 
@@ -731,16 +781,24 @@ FUNCTION calc_initial_numbers_at_length
    * @author Steve Martell
    */
 FUNCTION update_population_numbers_at_length
-	int h,i;
+	int h,i,l;
+	dvar_matrix A(1,nclass,1,nclass);
 
 	for( h = 1; h <= nsex; h++ )
 	{
 		for( i = syr; i <= nyr; i++ )
 		{
+			A = size_transition(h);
+			for( l = 1; l <= nclass; l++ )
+			{
+				A(l) = elem_prod( A(l), S(h)(i) );
+			}
 			N(h)(i+1)  = 0.5 * mfexp(logRbar) * rec_sdd;
-			N(h)(i+1) += elem_prod(N(h)(i),S(h)(i)) * size_transition(h);
+			N(h)(i+1) += A * N(h)(i);
 		}
 	}
+
+
 
 
 
@@ -824,15 +882,76 @@ FUNCTION calc_predicted_catch
 
 
 
+
+
+
+  /**
+   * @brief Calculate predicted relative abundance and residuals
+   * @author Steve Martell
+   * 
+   * @details This function uses the conditional mle for q to scale
+   * the population to the relative abundance index.  Assumed errors in 
+   * relative abundance are lognormal.
+   */
+FUNCTION calc_relative_abundance
+	int g,h,i,j,k;
+	int unit;
+	dvar_vector nal(1,nclass);	// numbers at length
+	dvar_vector sel(1,nclass);	// selectivity at length
+
+	for( k = 1; k <= nSurveys; k++ )
+	{
+		dvar_vector V(1,nSurveyRows(k));	
+		nal.initialize();
+		V.initialize();
+		for( j = 1; j <= nSurveyRows(k); j++ )
+		{
+			i = dSurveyData(k)(j)(1);		// year index
+			g = dSurveyData(k)(j)(3);		// gear index
+			h = dSurveyData(k)(j)(4);		//  sex index
+			unit = dSurveyData(k)(j)(7);	// units 1==biomass
+
+			if(h)
+			{
+				sel = exp(log_slx_capture(g)(h)(i));
+				unit==1?nal=elem_prod(N(h)(i),mean_wt(h)):N(h)(i);
+				V(j) = nal * sel;
+			}
+			else
+			{
+				for( h = 1; h <= nsex; h++ )
+				{
+					sel = exp(log_slx_capture(g)(h)(i));
+					unit==1?nal=elem_prod(N(h)(i),mean_wt(h)):N(h)(i);
+					V(j) += nal * sel;
+				}
+			}
+		} // nSurveyRows(k)
+		dvar_vector zt = log(obs_cpue(k)) - log(V);
+		dvariable zbar = mean(zt);
+		res_cpue(k)    = zt - zbar;
+		survey_q(k)    = mfexp(zbar);
+		pre_cpue(k)    = survey_q(k) * V;
+	}
+
+
+
+
+
+
+
+
+
   /**
    * @brief calculate objective function
    * @details 
    * 
    * Likelihood components
-   * 	1) likelihood of the catch data (assume lognormal error)
+   * 	-# likelihood of the catch data (assume lognormal error)
+   * 	-# likelihood of relative abundance data
    * 
    * Penalty components
-   * 	1) Penalty on log_fdev to ensure they sum to zero.
+   * 	-# Penalty on log_fdev to ensure they sum to zero.
    * 
    */
 FUNCTION calc_objective_function
@@ -842,9 +961,8 @@ FUNCTION calc_objective_function
 	nloglike.initialize();
 	nlogPenalty.initialize();
 
-	// Likelihood of the catch data.
-	dvar_vector std = sqrt(square(catch_cv)+1.0);
-	nloglike(1) = dnorm(res_catch,std);
+	// 1) Likelihood of the catch data.
+	nloglike(1) = dnorm(res_catch,catch_cv);
 
 	// Penalty on log_fdev to ensure they sum to zero 
 	for(int k = 1; k <= nfleet; k++ )
@@ -853,6 +971,11 @@ FUNCTION calc_objective_function
 		nlogPenalty(1) += 10000.0*s*s;
 	}
 
+	// 2) Likelihood of the relative abundance data.
+	for(int k = 1; k <= nSurveys; k++ )
+	{
+		nloglike(2) += dnorm(res_cpue(k),cpue_cv(k));
+	}
 
 
 
@@ -864,6 +987,9 @@ REPORT_SECTION
 	REPORT(obs_catch);
 	REPORT(pre_catch);
 	REPORT(res_catch);
+	REPORT(obs_cpue);
+	REPORT(pre_cpue);
+	REPORT(res_cpue);
 	REPORT(log_slx_capture);
 	REPORT(log_slx_retaind);
 	REPORT(log_slx_discard);
