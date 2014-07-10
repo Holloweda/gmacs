@@ -121,7 +121,9 @@ DATA_SECTION
     }
   END_CALCS
 
-	// |-----------|
+  // Use class_link to reformat data where necessary (when ndclass != nclass):
+
+  // |-----------|
 	// | ALLOMETRY |
 	// |-----------|
 	init_vector lw_alfa(1,nsex);
