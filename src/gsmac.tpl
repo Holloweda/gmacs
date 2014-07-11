@@ -104,7 +104,7 @@ DATA_SECTION
     else
     {
       // Links are 1:1 when ndclass is equal to nclass:
-      if(class_div = 1)
+      if(class_div == 1)
       {
         ivector class_link_col(1,nclass);       
         class_link_col.fill_seqadd(1,1);    
