@@ -1,4 +1,4 @@
-// Catch at length model: Model dimensions are years by size, sex, shell-condition, and maturity stage.
+// Catch-at-length model: Model dimensions are years by size, sex, shell-condition, and maturity stage.
 // Note: This simple example adapted from ADMB catage.tpl as a learning exercise for Gmacs model development.
 // By Athol Whitten and Jim Ianelli, SAFS UW and ASFC NOAA 2014
 
@@ -10,43 +10,28 @@ GLOBALS_SECTION
   ofstream echoinput("echoinput.ad");
 
 DATA_SECTION
-  init_int nyrs; 
-  init_int nclass;
+  init_int nyrs;
+  init_int ndclass;
   init_int nsex;
   init_int nshell;
   init_int nstage;
 
-  !! int ncol = nsex * nshell * nstage * nclass;
+  init_int nclass;
+  init_vector breaks(1,nclass+1);
 
-  !! int npshell = nsex*nshell;
-  !! int npstage = nsex*nshell*nstage;
+  !! int nmats = nsex + nshell + nstage;
 
-  ivector psex(1,nsex);
-  ivector pshell(1,npshell);
-  ivector pstage(1,npstage);
-
-  !! psex.fill_seqadd(1,(ncol/nsex));
-  !! pshell.fill_seqadd(1,(ncol/npshell));
-  !! pstage.fill_seqadd(1,(ncol/npstage));
+  !! int mshell = nsex + 1;
+  !! int mstage = nsex + nshell;
    
- LOC_CALCS
-  int some_num = psex.indexmax();
-  int some_num2 = psex(psex.indexmax());
- END_CALCS
-
   !! echo(nyrs);
   !! echo(nclass);
   !! echo(nsex);
   !! echo(nshell);
   !! echo(nstage);
 
-  !! echo(ncol);
-  !! echo(psex);
-  !! echo(pshell);
-  !! echo(pstage);
-
-  !! echo (some_num);
-  !! echo (some_num2);
+  !! echo(mshell);
+  !! echo(mstage);
 
   // Loop over i for each p*(i) -> p*(i)+ ncol/np* as i goes from 1 to np*.
   
@@ -131,11 +116,8 @@ PRELIMINARY_CALCS_SECTION
 PROCEDURE_SECTION
   // Example of using FUNCTION to structure the procedure section
   get_mortality_and_survivial_rates();
-
   get_numbers_at_size();
-
   get_catch_at_size();
-
   evaluate_the_objective_function();
 
 FUNCTION get_mortality_and_survivial_rates
@@ -199,7 +181,7 @@ FUNCTION evaluate_the_objective_function
   avg_F=sum(F)/double(size_count(F));
   if (last_phase())
   {
-    // a very small penalty on the aversize fishing mortality
+    // a very small penalty on the average fishing mortality
     f+= .001*square(log(avg_F/.2));
   }
   else

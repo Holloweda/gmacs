@@ -1,0 +1,3 @@
+pause
+catlen.exe
+pause
