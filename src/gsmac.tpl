@@ -24,43 +24,6 @@
 //    n = index for shell condition.
 // ==================================================================================== //
 
-GLOBALS_SECTION
-	#include <admodel.h>
-	#include <time.h>
-	#include <contrib.h>
-	#include "../../CSTAR/include/cstar.h"
-
-	time_t start,finish;
-	long hour,minute,second;
-	double elapsed_time;
-
-	// Define objects for report file, echoinput, etc.
-	/**
-	\def report(object)
-	Prints name and value of \a object on ADMB report %ofstream file.
-	*/
-	#undef REPORT
-	#define REPORT(object) report << #object "\n" << object << endl;
-
-	/**
-	 *
-	 * \def COUT(object)
-	 * Prints object to screen during runtime.
-	 * cout <<setw(6) << setprecision(3) << setfixed() << x << endl;
-	 */
-	 #undef COUT
-	 #define COUT(object) cout << #object "\n" << setw(6) \
-	 << setprecision(3) << setfixed() << object << endl;
-
-TOP_OF_MAIN_SECTION
-	time(&start);
-	arrmblsize = 50000000;
-	gradient_structure::set_GRADSTACK_BUFFER_SIZE(1.e7);
-	gradient_structure::set_CMPDIF_BUFFER_SIZE(1.e7);
-	gradient_structure::set_MAX_NVAR_OFFSET(5000);
-	gradient_structure::set_NUM_DEPENDENT_VARIABLES(5000);
-	gradient_structure::set_MAX_DLINKS(50000);
-
 DATA_SECTION
 	// |------------------------|
 	// | DATA AND CONTROL FILES |
@@ -68,26 +31,28 @@ DATA_SECTION
 	init_adstring datafile;
 	init_adstring controlfile;
 
-
-
-	!! ad_comm::change_datafile_name(datafile);
+	!! ad_comm::change_datafile_name(datafile); ECHO(datafile);ECHO(controlfile);
 
 	// |------------------|
 	// | MODEL DIMENSIONS |
 	// |------------------|
-	init_int syr;		// initial year
-	init_int nyr;		// terminal year
-	init_number jstep;  // time step (years)
-	init_int nfleet;	// number of gears
-	init_int nsex;		// number of sexes
-	init_int nshell;	// number of shell conditions
-	init_int nmature;	// number of maturity types
-	init_int nclass;	// number of size-classes in the model
-  init_int ndclass; // number of size-classes in the data
+
+	init_int syr;		///> initial year
+	init_int nyr;		///> terminal year
+  vector mod_yrs(syr,nyr) ///> Model years
+  !! mod_yrs.fill_seqadd(syr,1);
+	init_number jstep;  ///> time step (years)
+	init_int nfleet;	///> number of gears
+	init_int nsex;		///> number of sexes
+	init_int nshell;	///> number of shell conditions
+	init_int nmature;	///> number of maturity types
+	init_int nclass;	///> number of size-classes
+	init_int ndclass; // number of size-classes in the data
 
 	init_vector size_breaks(1,nclass+1);
 	vector       mid_points(1,nclass);
 	!! mid_points = size_breaks(1,nclass) + first_difference(size_breaks);
+	!! ECHO(syr); ECHO(nyr); ECHO(mod_yrs);ECHO(nfleet); ECHO(nsex); ECHO(nshell);ECHO(nmature); ECHO(nclass);
 
   // Initialize class-link matrix and fill as necessary:
   matrix class_link(1,nclass,1,2);      ///< Matrix of links between model and data size-classes
@@ -138,12 +103,14 @@ DATA_SECTION
 			mean_wt(h) = lw_alfa(h) * pow(mid_points,lw_beta(h));
 		}
 	END_CALCS
+	!! ECHO(lw_alfa); ECHO(lw_beta); ECHO(mean_wt);
 
 	// |-------------|
 	// | FLEET NAMES |
 	// |-------------|
 	init_adstring name_read_flt;        
 	init_adstring name_read_srv;
+	!! ECHO(name_read_srv); ECHO(name_read_flt);
 
 	// |--------------|
 	// | CATCH SERIES |
@@ -154,6 +121,28 @@ DATA_SECTION
 	vector  catch_cv(1,nCatchRows);
 	!! obs_catch = column(dCatchData,5);
 	!!  catch_cv = column(dCatchData,6);
+	!! ECHO(obs_catch); ECHO(catch_cv);
+
+	// From the catch series determine the number of fishing mortality
+	// rate parameters that need to be estimated.  Note that  there is
+	// a number of combinations which require a F to be estimated. 
+	ivector nFparams(1,nfleet);
+	imatrix fhit(syr,nyr,1,nfleet);
+
+	LOC_CALCS
+		nFparams.initialize();
+		fhit.initialize();
+		for(int i = 1; i <= nCatchRows; i++ )
+		{
+			int k = dCatchData(i,3);
+			int y = dCatchData(i,1);
+			if(!fhit(y,k))
+			{
+				fhit(y,k)   ++;
+				nFparams(k) ++;
+			}
+		}
+	END_CALCS
 
 	// |----------------------------|
 	// | RELATIVE ABUNDANCE INDICES |
@@ -169,6 +158,7 @@ DATA_SECTION
 			obs_cpue(k) = column(dSurveyData(k),5);
 			 cpue_cv(k) = column(dSurveyData(k),6);
 		}
+	  ECHO(obs_cpue); ECHO(cpue_cv); 
 	END_CALCS
 
 	init_int nSizeComps;
@@ -182,6 +172,8 @@ DATA_SECTION
 			dmatrix tmp = trans(d3_SizeComps(k)).sub(1,nSizeCompCols(k));
 			d3_obs_size_comps(k) = trans(tmp);
 		}
+	  ECHO(nSizeComps); 
+	  ECHO(d3_obs_size_comps); 
 	END_CALCS
 
 	// |------------------|
@@ -207,7 +199,6 @@ DATA_SECTION
 	// | LEADING PARAMETER CONTROLS |
 	// |----------------------------|
 	init_int ntheta;
-	ivector junk(1,ntheta);
 	init_matrix theta_control(1,ntheta,1,7);
 	vector theta_ival(1,ntheta);
 	vector theta_lb(1,ntheta);
@@ -218,7 +209,6 @@ DATA_SECTION
 		theta_lb   = column(theta_control,2);
 		theta_ub   = column(theta_control,3);
 		theta_phz  = ivector(column(theta_control,4));
-		junk = 1;
 	END_CALCS
 	
 
@@ -290,18 +280,34 @@ DATA_SECTION
 		}
 	END_CALCS
 
+
+	// |---------------------------------------------------------|
+	// | PENALTIES FOR MEAN FISHING MORTALITY RATE FOR EACH GEAR |
+	// |---------------------------------------------------------|
+	init_matrix f_controls(1,nfleet,1,4);
+	ivector f_phz(1,nfleet);
+	vector pen_fbar(1,nfleet);
+	matrix pen_fstd(1,2,1,nfleet);
+	LOC_CALCS
+		pen_fbar = column(f_controls,1);
+		for(int i=1; i<=2; i++)
+			pen_fstd(i) = trans(f_controls)(i+1);
+		f_phz    = ivector(column(f_controls,4));
+	END_CALCS
+
+
 	!! cout<<"end of control section"<<endl;
-	!! COUT(theta_ival);
+	
 
 INITIALIZATION_SECTION
   theta theta_ival;
+  log_fbar  pen_fbar;
   alpha     3.733;
   beta      0.2;
   scale    50.1;
  	
 
 PARAMETER_SECTION
-	!! cout<<"'here we are'"<<endl;
 	// Leading parameters
 	//      M = theta(1)
 	// ln(Ro) = theta(2)
@@ -337,17 +343,17 @@ PARAMETER_SECTION
 	END_CALCS
 
 	// Fishing mortality rate parameters
-	init_bounded_number_vector log_fbar(1,nfleet,-30.0,5.0,1);
+	init_bounded_number_vector log_fbar(1,nfleet,-30.0,5.0,f_phz);
+	init_bounded_vector_vector log_fdev(1,nfleet,1,nFparams,-10.,10.,f_phz);
 
-	!! for(int k = 1; k <= nfleet; k++) log_fbar(k) = log(0.1);
-	!! ivector f_phz(1,nfleet);
-	!! f_phz = 1;
-	!! ivector isyr(1,nfleet);
-	!! isyr = syr;
-	!! ivector inyr(1,nfleet);
-	!! inyr = nyr;
-	init_bounded_vector_vector log_fdev(1,nfleet,isyr,inyr,-10.,10.,f_phz);
-
+	//!! for(int k = 1; k <= nfleet; k++) log_fbar(k) = log(pen_fbar+1.e-10);
+	//!! ivector f_phz(1,nfleet);
+	//!! f_phz = 1;
+	//!! ivector isyr(1,nfleet);
+	//!! isyr = syr;
+	//!! ivector inyr(1,nfleet);
+	//!! inyr = nyr;
+	//init_bounded_vector_vector log_fdev2(1,nfleet,isyr,inyr,-10.,10.,f_phz);
 	
 	objective_function_value objfun;
 
@@ -375,7 +381,7 @@ PARAMETER_SECTION
 	3darray F(1,nsex,syr,nyr,1,nclass);		// Fishing mortality
 
 	3darray N(1,nsex,syr,nyr+1,1,nclass);		// Numbers-at-length
-	3darray log_ft(1,nfleet,1,nsex,syr,nyr);	// Fishing mortality by gear
+	3darray ft(1,nfleet,1,nsex,syr,nyr);		// Fishing mortality by gear
 	3darray d3_pre_size_comps(1,nSizeComps,1,nSizeCompRows,1,nSizeCompCols);
 	3darray d3_res_size_comps(1,nSizeComps,1,nSizeCompRows,1,nSizeCompCols);
 
@@ -390,8 +396,6 @@ PROCEDURE_SECTION
 	calc_selectivities();
 	calc_fishing_mortality();
 
-
-
 	// Population dynamics ...
 	calc_growth_increments();
 	calc_size_transition_matrix();
@@ -402,14 +406,10 @@ PROCEDURE_SECTION
 	calc_initial_numbers_at_length();
 	update_population_numbers_at_length();
 
-
-
 	// observation models ...
 	calc_predicted_catch();
 	calc_relative_abundance();
 	calc_predicted_composition();
-
-
 
 	// objective function ...
 	calc_objective_function();
@@ -425,9 +425,6 @@ FUNCTION initialize_model_parameters
   logRbar = theta(2);
   ra      = theta(3);
   rbeta   = theta(4);
-
-
-
 
 
   /**
@@ -457,12 +454,10 @@ FUNCTION calc_selectivities
 
 	for( k = 1; k <= nslx; k++ )
 	{	
-		
 		block = 1;
 		cstar::Selex<dvar_vector> *pSLX[slx_rows(k)-1];
 		for( j = 0; j < slx_rows(k); j++ )
 		{
-
 			switch (slx_type(k))
 			{
 			case 1:  //coefficients
@@ -482,11 +477,8 @@ FUNCTION calc_selectivities
 				pSLX[j] = new cstar::LogisticCurve95<dvar_vector,dvariable>(p1,p2);
 			break;
 			}
-
 			block ++;
-			
 		}
-		
 		
 		// fill array with selectivity coefficients
 		j = -1;
@@ -527,12 +519,6 @@ FUNCTION calc_selectivities
 
 
 
-
-
-
-
-
-
   /**
    * @brief Calculate fishing mortality rates for each fleet.
    * @details For each fleet estimate scaler log_fbar and deviates (f_devs).
@@ -548,10 +534,10 @@ FUNCTION calc_selectivities
    * deaths due to discards.  Where lambda is the discard mortality rate.
    */
 FUNCTION calc_fishing_mortality
-	int h,i,k;
+	int h,i,k,ik;
 	double lambda = 0.5;  // discard mortality rate from control file
 	F.initialize();
-	log_ft.initialize();
+	ft.initialize();
 	dvar_vector sel(1,nclass);
 	dvar_vector ret(1,nclass);
 	dvar_vector tmp(1,nclass);
@@ -560,21 +546,22 @@ FUNCTION calc_fishing_mortality
 	{
 		for( h = 1; h <= nsex; h++ )
 		{
+			ik=1;
 			for( i = syr; i <= nyr; i++ )
 			{
-				log_ft(k)(h)(i) = log_fbar(k) + log_fdev(k,i);
-				sel = exp(log_slx_capture(k)(h)(i));
-				ret = exp(log_slx_retaind(k)(h)(i));
-				tmp = elem_prod(sel,ret+(1.0 - ret)*lambda);
-				F(h)(i) += mfexp(log_ft(k,h,i)) * tmp;
+				if(fhit(i,k))
+				{
+					ft(k)(h)(i) = mfexp(log_fbar(k)+log_fdev(k,ik++));
+
+					//ft(k)(h)(i) = mfexp(log_fbar(k) + log_fdev(k,i));
+					sel = exp(log_slx_capture(k)(h)(i));
+					ret = exp(log_slx_retaind(k)(h)(i));
+					tmp = elem_prod(sel,ret+(1.0 - ret)*lambda);
+					F(h)(i) += ft(k,h,i) * tmp;
+				}
 			}
 		}
 	}
-
-
-
-
-
 
 
 
@@ -764,6 +751,7 @@ FUNCTION calc_initial_numbers_at_length
 			A(l) = elem_prod( A(l), S(h)(syr) );
 		}
 
+		
 		x = -solve(A-Id,rt);
 		N(h)(syr) = x;
 	}
@@ -822,7 +810,7 @@ FUNCTION calc_predicted_catch
 	int h,i,j,k;
 	int type,unit;
 	pre_catch.initialize();
-	dvariable ft;
+	dvariable tmp_ft;
 	dvar_vector sel(1,nclass);
 	dvar_vector nal(1,nclass);		// numbers or biomass at length.
 	
@@ -853,10 +841,10 @@ FUNCTION calc_predicted_catch
 					sel = 1.0 - exp( log_slx_retaind(k)(h)(i) );
 				break;
 			}
-			ft = mfexp( log_ft(k)(h)(i) );
+			tmp_ft = ft(k)(h)(i);
 			unit==1?nal=elem_prod(N(h)(i),mean_wt(h)):N(h)(i);
 
-			pre_catch(j) = nal * elem_div(elem_prod(ft*sel,1.0-exp(-Z(h)(i))),Z(h)(i));
+			pre_catch(j) = nal * elem_div(elem_prod(tmp_ft*sel,1.0-exp(-Z(h)(i))),Z(h)(i));
 		}
 		else 	// sexes combibed
 		{
@@ -872,10 +860,10 @@ FUNCTION calc_predicted_catch
 						sel = 1.0 - exp( log_slx_retaind(k)(h)(i) );
 					break;
 				}
-				ft = mfexp( log_ft(k)(h)(i) );
+				tmp_ft = ft(k)(h)(i);
 				unit==1?nal=elem_prod(N(h)(i),mean_wt(h)):N(h)(i);
 
-				pre_catch(j) += nal * elem_div(elem_prod(ft*sel,1.0-exp(-Z(h)(i))),Z(h)(i));
+				pre_catch(j) += nal * elem_div(elem_prod(tmp_ft*sel,1.0-exp(-Z(h)(i))),Z(h)(i));
 			}
 		}
 	}
@@ -1037,28 +1025,24 @@ FUNCTION calc_predicted_composition
    * Likelihood components
    * 	-# likelihood of the catch data (assume lognormal error)
    * 	-# likelihood of relative abundance data
-   * 	-# likelihood for the size composition data.
+   * 	-# likelihood of size composition data
    * 
    * Penalty components
    * 	-# Penalty on log_fdev to ensure they sum to zero.
+   * 	-# Penalty to regularize values of log_fbar.
    * 
    */
 FUNCTION calc_objective_function
+
+	// |---------------------------------------------------------------------------------|
+	// | NEGATIVE LOGLIKELIHOOD COMPONENTS FOR THE OBJECTIVE FUNCTION                    |
+	// |---------------------------------------------------------------------------------|
 	dvar_vector nloglike(1,3);
-	dvar_vector nlogPenalty(1,2);
-
 	nloglike.initialize();
-	nlogPenalty.initialize();
-
+	
 	// 1) Likelihood of the catch data.
 	nloglike(1) = dnorm(res_catch,catch_cv);
 
-	// Penalty on log_fdev to ensure they sum to zero 
-	for(int k = 1; k <= nfleet; k++ )
-	{
-		dvariable s    = mean(log_fdev(k));
-		nlogPenalty(1) += 10000.0*s*s;
-	}
 
 
 
@@ -1068,8 +1052,6 @@ FUNCTION calc_objective_function
 		nloglike(2) += dnorm(res_cpue(k),cpue_cv(k));
 	}
 
-
-
 	// 3) Likelihood for size composition data.
 	double minP = 0;
 	double variance;
@@ -1077,15 +1059,43 @@ FUNCTION calc_objective_function
 	{
 		dmatrix O     = d3_obs_size_comps(ii);
 		dvar_matrix P = d3_pre_size_comps(ii);
-
-		nloglike(3) += dmultinom(O,P,d3_res_size_comps(ii),variance,minP);
+		nloglike(3)  += dmultinom(O,P,d3_res_size_comps(ii),variance,minP);
+		COUT(nloglike(3));
 	}
+
+	// |---------------------------------------------------------------------------------|
+	// | PENALTIES AND CONSTRAINTS                                                       |
+	// |---------------------------------------------------------------------------------|
+	dvar_vector nlogPenalty(1,2);
+	nlogPenalty.initialize();
+
+	// 1) Penalty on log_fdev to ensure they sum to zero 
+	for(int k = 1; k <= nfleet; k++ )
+	{
+		dvariable s    = mean(log_fdev(k));
+		nlogPenalty(1) += 10000.0*s*s;
+	}
+
+
+	// 2) Penalty on mean F to regularize the solution.
+	int irow=1;
+	if(last_phase()) irow=2;
+	for(int k = 1; k <= nfleet; k++ )
+	{
+		nlogPenalty(2) += dnorm(exp(log_fbar(k)),pen_fbar(k),pen_fstd(irow,k));
+	}
+
+
 
 	objfun = sum(nloglike) + sum(nlogPenalty);
 
 
 
 REPORT_SECTION
+  REPORT(mod_yrs);
+  REPORT(size_breaks);
+  REPORT(nloglike);
+  REPORT(nlogPenalty);
 	REPORT(obs_catch);
 	REPORT(pre_catch);
 	REPORT(res_catch);
@@ -1098,6 +1108,61 @@ REPORT_SECTION
 	REPORT(d3_obs_size_comps);
 	REPORT(d3_pre_size_comps);
 
+  REPORT(N);
 
 
 
+
+GLOBALS_SECTION
+	#include <admodel.h>
+	#include <time.h>
+	#include <contrib.h>
+	#include "../../CSTAR/include/cstar.h"
+
+	time_t start,finish;
+	long hour,minute,second;
+	double elapsed_time;
+
+	// Define objects for report file, echoinput, etc.
+	/**
+	\def report(object)
+	Prints name and value of \a object on ADMB report %ofstream file.
+	*/
+	#undef REPORT
+	#define REPORT(object) report << #object "\n" << object << endl;
+
+	/**
+	 *
+	 * \def COUT(object)
+	 * Prints object to screen during runtime.
+	 * cout <<setw(6) << setprecision(3) << setfixed() << x << endl;
+	 */
+	 #undef COUT
+	 #define COUT(object) cout << #object "\n" << setw(6) \
+	 << setprecision(3) << setfixed() << object << endl;
+  /**
+
+  \def ECHO(object)
+  Prints name and value of \a object on echoinput %ofstream file.
+  */
+	 #undef ECHO
+   #define ECHO(object) echoinput << #object << "\n" << object << endl;
+   // #define ECHO(object,text) echoinput << object << "\t" << text << endl;
+ 
+   /**
+   \def check(object)
+   Prints name and value of \a object on checkfile %ofstream output file.
+   */
+   #define check(object) checkfile << #object << "\n" << object << endl;
+   // Open output files using ofstream
+   ofstream echoinput("echoinput.rep");
+   ofstream checkfile("checkfile.rep");
+
+TOP_OF_MAIN_SECTION
+	time(&start);
+	arrmblsize = 50000000;
+	gradient_structure::set_GRADSTACK_BUFFER_SIZE(1.e7);
+	gradient_structure::set_CMPDIF_BUFFER_SIZE(1.e7);
+	gradient_structure::set_MAX_NVAR_OFFSET(5000);
+	gradient_structure::set_NUM_DEPENDENT_VARIABLES(5000);
+	gradient_structure::set_MAX_DLINKS(50000); 
