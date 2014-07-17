@@ -355,6 +355,8 @@ PARAMETER_SECTION
 	//!! inyr = nyr;
 	//init_bounded_vector_vector log_fdev2(1,nfleet,isyr,inyr,-10.,10.,f_phz);
 	
+	vector nloglike(1,3);
+	vector nlogPenalty(1,2);
 	objective_function_value objfun;
 
 	number M0;				///> natural mortality rate
@@ -1037,7 +1039,6 @@ FUNCTION calc_objective_function
 	// |---------------------------------------------------------------------------------|
 	// | NEGATIVE LOGLIKELIHOOD COMPONENTS FOR THE OBJECTIVE FUNCTION                    |
 	// |---------------------------------------------------------------------------------|
-	dvar_vector nloglike(1,3);
 	nloglike.initialize();
 	
 	// 1) Likelihood of the catch data.
@@ -1066,7 +1067,6 @@ FUNCTION calc_objective_function
 	// |---------------------------------------------------------------------------------|
 	// | PENALTIES AND CONSTRAINTS                                                       |
 	// |---------------------------------------------------------------------------------|
-	dvar_vector nlogPenalty(1,2);
 	nlogPenalty.initialize();
 
 	// 1) Penalty on log_fdev to ensure they sum to zero 
