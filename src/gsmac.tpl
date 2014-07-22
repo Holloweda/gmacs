@@ -39,8 +39,8 @@ DATA_SECTION
 
 	init_int syr;		///> initial year
 	init_int nyr;		///> terminal year
-  vector mod_yrs(syr,nyr) ///> Model years
-  !! mod_yrs.fill_seqadd(syr,1);
+	vector mod_yrs(syr,nyr) ///> Model years
+	!! mod_yrs.fill_seqadd(syr,1);
 	init_number jstep;  ///> time step (years)
 	init_int nfleet;	///> number of gears
 	init_int nsex;		///> number of sexes
@@ -158,7 +158,7 @@ DATA_SECTION
 			obs_cpue(k) = column(dSurveyData(k),5);
 			 cpue_cv(k) = column(dSurveyData(k),6);
 		}
-	  ECHO(obs_cpue); ECHO(cpue_cv); 
+		ECHO(obs_cpue); ECHO(cpue_cv); 
 	END_CALCS
 
 	init_int nSizeComps;
@@ -172,8 +172,8 @@ DATA_SECTION
 			dmatrix tmp = trans(d3_SizeComps(k)).sub(1,nSizeCompCols(k));
 			d3_obs_size_comps(k) = trans(tmp);
 		}
-	  ECHO(nSizeComps); 
-	  ECHO(d3_obs_size_comps); 
+		ECHO(nSizeComps); 
+		ECHO(d3_obs_size_comps); 
 	END_CALCS
 
 	// |------------------|
@@ -218,23 +218,23 @@ DATA_SECTION
 	int nslx;
 	!! nslx = 2 * nfleet;
 	init_ivector slx_nsel_blocks(1,nslx);
- 	ivector nc(1,nslx);
- 	!! nc = 11 + slx_nsel_blocks;
- 	init_matrix slx_control(1,nslx,1,nc);
- 	ivector slx_indx(1,nslx);
- 	ivector slx_type(1,nslx);
- 	ivector slx_phzm(1,nslx);
- 	ivector slx_bsex(1,nslx);			// boolean 0 sex-independent, 1 sex-dependent
- 	ivector slx_xnod(1,nslx);
- 	ivector slx_inod(1,nslx);
- 	ivector slx_rows(1,nslx);
- 	ivector slx_cols(1,nslx);
- 	 vector slx_mean(1,nslx);
- 	 vector slx_stdv(1,nslx);
- 	 vector slx_lam1(1,nslx);
- 	 vector slx_lam2(1,nslx);
- 	 vector slx_lam3(1,nslx);
- 	imatrix slx_blks(1,nslx,1,slx_nsel_blocks);
+	ivector nc(1,nslx);
+	!! nc = 11 + slx_nsel_blocks;
+	init_matrix slx_control(1,nslx,1,nc);
+	ivector slx_indx(1,nslx);
+	ivector slx_type(1,nslx);
+	ivector slx_phzm(1,nslx);
+	ivector slx_bsex(1,nslx);			// boolean 0 sex-independent, 1 sex-dependent
+	ivector slx_xnod(1,nslx);
+	ivector slx_inod(1,nslx);
+	ivector slx_rows(1,nslx);
+	ivector slx_cols(1,nslx);
+	 vector slx_mean(1,nslx);
+	 vector slx_stdv(1,nslx);
+	 vector slx_lam1(1,nslx);
+	 vector slx_lam2(1,nslx);
+	 vector slx_lam3(1,nslx);
+	imatrix slx_blks(1,nslx,1,slx_nsel_blocks);
 
 	LOC_CALCS
 		slx_indx = ivector(column(slx_control,1));
@@ -287,25 +287,41 @@ DATA_SECTION
 	init_matrix f_controls(1,nfleet,1,4);
 	ivector f_phz(1,nfleet);
 	vector pen_fbar(1,nfleet);
+	vector log_pen_fbar(1,nfleet);
 	matrix pen_fstd(1,2,1,nfleet);
 	LOC_CALCS
 		pen_fbar = column(f_controls,1);
+		log_pen_fbar = log(pen_fbar+1.0e-14);
 		for(int i=1; i<=2; i++)
 			pen_fstd(i) = trans(f_controls)(i+1);
 		f_phz    = ivector(column(f_controls,4));
 	END_CALCS
 
-
+	// |---------------------------------------------------------|
+	// | OTHER CONTROLS                                          |
+	// |---------------------------------------------------------|
+	init_vector model_controls(1,3);
+	int rdv_phz; 										///> Estimated rec_dev phase
+	int verbose;										///> Flag to print to screen
+	int bInitializeUnfished;				///> Flag to initialize at unfished conditions
+	LOC_CALCS
+		rdv_phz = int(model_controls(1));
+		verbose = int(model_controls(2));
+		bInitializeUnfished = int(model_controls(3));
+	END_CALCS
 	!! cout<<"end of control section"<<endl;
 	
+	int nf;
+	!! nf = 0;
+
 
 INITIALIZATION_SECTION
-  theta theta_ival;
-  log_fbar  pen_fbar;
-  alpha     3.733;
-  beta      0.2;
-  scale    50.1;
- 	
+	theta theta_ival;
+	log_fbar  log_pen_fbar;
+	alpha     3.733;
+	beta      0.02;
+	scale    15.1;
+	
 
 PARAMETER_SECTION
 	// Leading parameters
@@ -315,15 +331,14 @@ PARAMETER_SECTION
 	// rbeta  = theta(4)
 	init_bounded_number_vector theta(1,ntheta,theta_lb,theta_ub,theta_phz);
 
-
 	// Molt increment parameters
 	init_bounded_vector alpha(1,nsex,0,100,-1);
 	init_bounded_vector beta(1,nsex,0,10,-1);
 	init_bounded_vector scale(1,nsex,1,100,-1);
 
 	// Molt probability parameters
-	init_bounded_vector molt_mu(1,nsex,0,200,1);
-	init_bounded_vector molt_cv(1,nsex,0,1,1);
+	init_bounded_vector molt_mu(1,nsex,0,200,-1);
+	init_bounded_vector molt_cv(1,nsex,0,1,-1);
 
 	// Selectivity parameters
 	init_bounded_matrix_vector log_slx_pars(1,nslx,1,slx_rows,1,slx_cols,-25,25,slx_phzm);
@@ -339,33 +354,32 @@ PARAMETER_SECTION
 				}
 			}
 		}
-
 	END_CALCS
 
 	// Fishing mortality rate parameters
-	init_bounded_number_vector log_fbar(1,nfleet,-30.0,5.0,f_phz);
-	init_bounded_vector_vector log_fdev(1,nfleet,1,nFparams,-10.,10.,f_phz);
+	init_number_vector log_fbar(1,nfleet,f_phz);
 
-	//!! for(int k = 1; k <= nfleet; k++) log_fbar(k) = log(pen_fbar+1.e-10);
-	//!! ivector f_phz(1,nfleet);
-	//!! f_phz = 1;
-	//!! ivector isyr(1,nfleet);
-	//!! isyr = syr;
-	//!! ivector inyr(1,nfleet);
-	//!! inyr = nyr;
-	//init_bounded_vector_vector log_fdev2(1,nfleet,isyr,inyr,-10.,10.,f_phz);
-	
+	init_vector_vector log_fdev(1,nfleet,1,nFparams,f_phz);
+
+
+	// Recruitment deviation parameters
+	init_bounded_dev_vector rec_ini(1,nclass,-5.0,5.0,rdv_phz);  ///> initial size devs
+	init_bounded_dev_vector rec_dev(syr,nyr,-15.0,15.0,rdv_phz); ///> recruitment deviations
+
 	vector nloglike(1,3);
 	vector nlogPenalty(1,2);
 	objective_function_value objfun;
 
 	number M0;				///> natural mortality rate
-	number logRbar;			///> logarithm of unfished recruits
+	number logR0;			///> logarithm of unfished recruits.
+	number logRbar;		///> logarithm of average recruits(syr+1,nyr)
+	number logRini;   ///> logarithm of initial recruitment(syr).
 	number ra;				///> shape parameter for recruitment distribution
 	number rbeta;			///> rate parameter for recruitment distribution
 
 	vector rec_sdd(1,nclass);			///> recruitment size_density_distribution
-	vector survey_q(1,nSurveys);		///> scalers for relative abundance indices (q)
+	vector recruits(syr,nyr);			///> vector of estimated recruits
+	vector survey_q(1,nSurveys);	///> scalers for relative abundance indices (q)
 
 	vector pre_catch(1,nCatchRows);		///> predicted catch from Barnov catch equatoin
 	vector res_catch(1,nCatchRows);		///> catch residuals in log-space
@@ -374,22 +388,24 @@ PARAMETER_SECTION
 	matrix res_cpue(1,nSurveys,1,nSurveyRows);	///> relative abundance residuals
 	
 	matrix molt_increment(1,nsex,1,nclass);		///> linear molt increment
-	matrix molt_probability(1,nsex,1,nclass); 	///> probability of molting
+	matrix molt_probability(1,nsex,1,nclass); ///> probability of molting
 
 	3darray size_transition(1,nsex,1,nclass,1,nclass);
-	3darray M(1,nsex,syr,nyr,1,nclass);		// Natural mortality
-	3darray Z(1,nsex,syr,nyr,1,nclass);		// Total mortality
-	3darray S(1,nsex,syr,nyr,1,nclass);		// Surival Rate (S=exp(-Z))
-	3darray F(1,nsex,syr,nyr,1,nclass);		// Fishing mortality
+	3darray M(1,nsex,syr,nyr,1,nclass);		///> Natural mortality
+	3darray Z(1,nsex,syr,nyr,1,nclass);		///> Total mortality
+	3darray S(1,nsex,syr,nyr,1,nclass);		///> Surival Rate (S=exp(-Z))
+	3darray F(1,nsex,syr,nyr,1,nclass);		///> Fishing mortality
 
-	3darray N(1,nsex,syr,nyr+1,1,nclass);		// Numbers-at-length
-	3darray ft(1,nfleet,1,nsex,syr,nyr);		// Fishing mortality by gear
+	3darray N(1,nsex,syr,nyr+1,1,nclass);		///> Numbers-at-length
+	3darray ft(1,nfleet,1,nsex,syr,nyr);		///> Fishing mortality by gear
 	3darray d3_pre_size_comps(1,nSizeComps,1,nSizeCompRows,1,nSizeCompCols);
 	3darray d3_res_size_comps(1,nSizeComps,1,nSizeCompRows,1,nSizeCompCols);
 
 	4darray log_slx_capture(1,nfleet,1,nsex,syr,nyr,1,nclass);
 	4darray log_slx_retaind(1,nfleet,1,nsex,syr,nyr,1,nclass);
 	4darray log_slx_discard(1,nfleet,1,nsex,syr,nyr,1,nclass);
+
+	sdreport_vector sd_recruits(syr,nyr);
 
 PROCEDURE_SECTION
 	initialize_model_parameters();
@@ -416,35 +432,49 @@ PROCEDURE_SECTION
 	// objective function ...
 	calc_objective_function();
 
+	// sd_report variables
+	if( last_phase() ) calc_sdreport();
+	nf++;
+	//COUT(nf);
 
-  /**
-   * @brief Initialize model parameters
-   * @details Set global variable equal to the estimated parameter vectors.
-   */
+
+	/**
+	 * @brief calculate sdreport variables in final phase
+	 */
+FUNCTION calc_sdreport
+	sd_recruits = recruits;
+	
+
+	/**
+	 * @brief Initialize model parameters
+	 * @details Set global variable equal to the estimated parameter vectors.
+	 */
 FUNCTION initialize_model_parameters
-   // Get parameters from theta control matrix:
-  M0      = theta(1);
-  logRbar = theta(2);
-  ra      = theta(3);
-  rbeta   = theta(4);
+	 // Get parameters from theta control matrix:
+	M0      = theta(1);
+	logR0   = theta(2);
+	logRini = theta(3);
+	logRbar = theta(4);
+	ra      = theta(5);
+	rbeta   = theta(6);
 
 
-  /**
-   * @brief Calculate selectivies for each gear.
-   * @author Steve Martell
-   * @details Three selectivities must be accounted for by each fleet.
-   * 1) capture probability, 2) retention probability, and 3) release probability.
-   * 
-   * Maintain the possibility of estimating selectivity independently for
-   * each sex; assumes there are data to estimate female selex.
-   * 
-   * Psuedocode:
-   * 	-# Loop over each gear:
-   * 	-# Create a pointer array with length = number of blocks
-   * 	-# Based on slx_type, fill pointer with parameter estimates.
-   * 	-# Loop over years and block-in the log_selectivity at mid points.
-   * 	
-   */
+	/**
+	 * @brief Calculate selectivies for each gear.
+	 * @author Steve Martell
+	 * @details Three selectivities must be accounted for by each fleet.
+	 * 1) capture probability, 2) retention probability, and 3) release probability.
+	 * 
+	 * Maintain the possibility of estimating selectivity independently for
+	 * each sex; assumes there are data to estimate female selex.
+	 * 
+	 * Psuedocode:
+	 * 	-# Loop over each gear:
+	 * 	-# Create a pointer array with length = number of blocks
+	 * 	-# Based on slx_type, fill pointer with parameter estimates.
+	 * 	-# Loop over years and block-in the log_selectivity at mid points.
+	 * 	
+	 */
 FUNCTION calc_selectivities
 	int h,i,j,k;
 	int block;
@@ -521,20 +551,20 @@ FUNCTION calc_selectivities
 
 
 
-  /**
-   * @brief Calculate fishing mortality rates for each fleet.
-   * @details For each fleet estimate scaler log_fbar and deviates (f_devs).
-   * 
-   * In the event that there is effort data and catch data, then it's possible
-   * to estimate a catchability coefficient and predict the catch for the
-   * period of missing catch/discard data.  Best option for this would be
-   * to use F = q*E, where q = F/E.  Then in the objective function, minimize
-   * the variance in the estimates of q, and use the mean q to predict catch.
-   * Or minimize the first difference and assume a random walk in q.
-   * 
-   * Note that this function calculates the fishing mortality rate including
-   * deaths due to discards.  Where lambda is the discard mortality rate.
-   */
+	/**
+	 * @brief Calculate fishing mortality rates for each fleet.
+	 * @details For each fleet estimate scaler log_fbar and deviates (f_devs).
+	 * 
+	 * In the event that there is effort data and catch data, then it's possible
+	 * to estimate a catchability coefficient and predict the catch for the
+	 * period of missing catch/discard data.  Best option for this would be
+	 * to use F = q*E, where q = F/E.  Then in the objective function, minimize
+	 * the variance in the estimates of q, and use the mean q to predict catch.
+	 * Or minimize the first difference and assume a random walk in q.
+	 * 
+	 * Note that this function calculates the fishing mortality rate including
+	 * deaths due to discards.  Where lambda is the discard mortality rate.
+	 */
 FUNCTION calc_fishing_mortality
 	int h,i,k,ik;
 	double lambda = 0.5;  // discard mortality rate from control file
@@ -554,8 +584,7 @@ FUNCTION calc_fishing_mortality
 				if(fhit(i,k))
 				{
 					ft(k)(h)(i) = mfexp(log_fbar(k)+log_fdev(k,ik++));
-
-					//ft(k)(h)(i) = mfexp(log_fbar(k) + log_fdev(k,i));
+					
 					sel = exp(log_slx_capture(k)(h)(i));
 					ret = exp(log_slx_retaind(k)(h)(i));
 					tmp = elem_prod(sel,ret+(1.0 - ret)*lambda);
@@ -564,14 +593,19 @@ FUNCTION calc_fishing_mortality
 			}
 		}
 	}
+	//COUT(F(1)(syr));
+	//COUT(log_fbar(1));
+	//COUT(log_fdev(1));
+
+	//COUT(log_fbar);
+	
 
 
 
 
-
-  /**
-   * @brief Molt increment as a linear function of pre-molt size.
-   */
+	/**
+	 * @brief Molt increment as a linear function of pre-molt size.
+	 */
 FUNCTION calc_growth_increments
 	int h,l;
 
@@ -579,7 +613,7 @@ FUNCTION calc_growth_increments
 	{
 		for( l = 1; l <= nclass; l++ )
 		{
-			molt_increment(h)(l) = alpha(h) + beta(h) * mid_points(l);
+			molt_increment(h)(l) = alpha(h) - beta(h) * mid_points(l);
 		}
 	}
 	
@@ -589,21 +623,21 @@ FUNCTION calc_growth_increments
 
 
 
-  /**
-   * \brief Calclate the size transtion matrix.
-   * \Authors Steven Martell
-   * \details Calculates the size transition matrix for each sex based on
-   * growth increments, which is a linear function of the size interval, and
-   * the scale parameter for the gamma distribution.  This function does the 
-   * proper integration from the lower to upper size bin, where the mode of 
-   * the growth increment is scaled by the scale parameter.
-   * 
-   * This function loops over sex, then loops over the rows of the size
-   * transition matrix for each sex.  The probability of transitioning from 
-   * size l to size ll is based on the vector molt_increment and the 
-   * scale parameter. In all there are three parameters that define the size
-   * transition matrix (alpha, beta, scale) for each sex.
-   */
+	/**
+	 * \brief Calclate the size transtion matrix.
+	 * \Authors Steven Martell
+	 * \details Calculates the size transition matrix for each sex based on
+	 * growth increments, which is a linear function of the size interval, and
+	 * the scale parameter for the gamma distribution.  This function does the 
+	 * proper integration from the lower to upper size bin, where the mode of 
+	 * the growth increment is scaled by the scale parameter.
+	 * 
+	 * This function loops over sex, then loops over the rows of the size
+	 * transition matrix for each sex.  The probability of transitioning from 
+	 * size l to size ll is based on the vector molt_increment and the 
+	 * scale parameter. In all there are three parameters that define the size
+	 * transition matrix (alpha, beta, scale) for each sex.
+	 */
 FUNCTION calc_size_transition_matrix
 	int h,l,ll;
 	dvariable tmp;
@@ -611,25 +645,29 @@ FUNCTION calc_size_transition_matrix
 	dvar_matrix At(1,nclass,1,nclass);
 	size_transition.initialize();
 
-
+	
 	for( h = 1; h <= nsex; h++ )
 	{
 		for( l = 1; l <= nclass; l++ )
 		{
 			tmp = molt_increment(h)(l)/scale(h);
+			
 			psi.initialize();
 			for( ll = l; ll <= nclass+1; ll++ )
 			{
-				psi(ll) = cumd_gamma(size_breaks(ll)/scale(h),tmp);
+				if(ll<=nclass+1)
+				{
+					psi(ll) = cumd_gamma(size_breaks(ll)/scale(h),tmp);
+				}
 			}
+			
 			At(l)(l,nclass)  = first_difference(psi(l,nclass+1));
 			At(l)(l,nclass) /= sum(At(l));
-			// size_transition(h)(l)(l,nclass)  = first_difference(psi(l,nclass+1));
-			// size_transition(h)(l)(l,nclass) /= sum(size_transition(h)(l)(l,nclass));
 		}
-		size_transition(h) = trans(At);
+		size_transition(h) = At;
 	}
-
+	
+	
 	
 
 
@@ -638,16 +676,16 @@ FUNCTION calc_size_transition_matrix
 
 
 
-  /**
-   * @brief Calculate natural mortality array
-   * @details Natural mortality (M) is a 3d array for sex, year and size.
-   * @return NULL
-   * 
-   * todo:  
-   * 		- Add time varying components
-   * 		- Size-dependent mortality
-   * 
-   */
+	/**
+	 * @brief Calculate natural mortality array
+	 * @details Natural mortality (M) is a 3d array for sex, year and size.
+	 * @return NULL
+	 * 
+	 * todo:  
+	 * 		- Add time varying components
+	 * 		- Size-dependent mortality
+	 * 
+	 */
 FUNCTION calc_natural_mortality
 	int h;
 	M.initialize();
@@ -661,13 +699,13 @@ FUNCTION calc_natural_mortality
 
 
 
-  /**
-   * @brief Calculate total instantaneous mortality rate and survival rate
-   * @details \f$ S = exp(-Z) \f$
-   * @return NULL
-   * 
-   * 
-   */
+	/**
+	 * @brief Calculate total instantaneous mortality rate and survival rate
+	 * @details \f$ S = exp(-Z) \f$
+	 * @return NULL
+	 * 
+	 * 
+	 */
 FUNCTION calc_total_mortality
 	int h;
 	Z.initialize();
@@ -682,11 +720,11 @@ FUNCTION calc_total_mortality
 
 
 
-  /**
-   * \brief Calculate the probability of moulting vs carapace width.
-   * \details Note that the parameters molt_mu and molt cv can only be
-   * estimated in cases where there is new shell and old shell data.
-   */
+	/**
+	 * \brief Calculate the probability of moulting vs carapace width.
+	 * \details Note that the parameters molt_mu and molt cv can only be
+	 * estimated in cases where there is new shell and old shell data.
+	 */
 FUNCTION calc_molting_probability
 	int h;
 	molt_probability.initialize();
@@ -705,58 +743,90 @@ FUNCTION calc_molting_probability
 
 
 
-  /**
-   * @brief calculate size distribution for new recuits.
-   * @details Based on the gamma distribution, calculates the probability
-   * of a new recruit being in size-interval size
-   */
+	/**
+	 * @brief calculate size distribution for new recuits.
+	 * @details Based on the gamma distribution, calculates the probability
+	 * of a new recruit being in size-interval size.
+	 * @param ra is the mean of the distribution.
+	 * @param rbeta scales the variance of the distribution
+	 */
 FUNCTION calc_recruitment_size_distribution
-  dvariable ralpha = ra / rbeta;
-
-  for(int l=1; l<=nclass; l++)
-  {
-    dvariable x1 = size_breaks(l) / rbeta;
-    dvariable x2 = size_breaks(l+1) / rbeta;
-    rec_sdd(l) = cumd_gamma(x2, ralpha) 
-                   - cumd_gamma(x1, ralpha);
-  }
-  rec_sdd /= sum(rec_sdd);   // Standardize so each row sums to 1.0
-
-
-
-
-
-  /**
-   * @brief initialiaze populations numbers-at-length in syr
-   * @author Steve Martell
-   * @details This function initializes the populations numbers-at-length
-   * in the initial year of the model.  
-   * 
-   * Psuedocode:  See note from Dave Fournier.
-   * 
-   * 	
-   */
-FUNCTION calc_initial_numbers_at_length
+	dvariable ralpha = ra / rbeta;
+	dvar_vector x(1,nclass+1);
+	for(int l = 1; l <= nclass+1; l++ )
+	{
+		x(l) = cumd_gamma(size_breaks(l)/rbeta,ralpha);
+	}
+	rec_sdd  = first_difference(x);
+	rec_sdd /= sum(rec_sdd);   // Standardize so each row sums to 1.0
 	
-	N.initialize();
-	dmatrix Id=identity_matrix(1,nclass);
 
-	// Option 1: equilibrium approach
+
+
+	/**
+	 * @brief initialiaze populations numbers-at-length in syr
+	 * @author Steve Martell
+	 * @details This function initializes the populations numbers-at-length
+	 * in the initial year of the model.  
+	 * 
+	 * Psuedocode:  See note from Dave Fournier.
+	 * 
+	 * Athol, I think a better option here is to estimate a vector of 
+	 * deviates, one for each size class, and have the option to initialize
+	 * the model at unfished equilibrium, or some other steady state condition.
+	 * 	
+	 */
+FUNCTION calc_initial_numbers_at_length
+	dvariable log_initial_recruits;
+	N.initialize();
+
+	// Initial recrutment.
+	if ( bInitializeUnfished )
+	{
+		log_initial_recruits = logR0;
+	}
+	else
+	{
+		log_initial_recruits = logRini;
+	}
+	dvar_vector rt = 0.5 * mfexp( log_initial_recruits ) * rec_sdd;
+
+	// Equilibrium soln.
+	dmatrix Id=identity_matrix(1,nclass);
 	dvar_vector x(1,nclass);
-	dvar_matrix A(1,nclass,1,nclass);
-	dvar_vector rt = 0.5 * mfexp(logRbar) * rec_sdd;
+	dvar_matrix At(1,nclass,1,nclass);
+	dvar_matrix  A(1,nclass,1,nclass);
 	for(int h = 1; h <= nsex; h++ )
 	{
-		A = size_transition(h);
+		At = size_transition(h);
 		for(int l = 1; l <= nclass; l++ )
 		{
-			A(l) = elem_prod( A(l), S(h)(syr) );
+			//A(l) = elem_prod( A(l), S(h)(syr) );
+			At(l) *= S(h)(syr)(l);
 		}
-
-		
+		A = trans(At);
 		x = -solve(A-Id,rt);
-		N(h)(syr) = x;
+		N(h)(syr) = elem_prod(x,exp(rec_ini));
 	}
+	
+//	// Specification for initial numbers option (TODO: make part of control file)
+//  int init_n = 1;
+//
+//  switch(init_n)
+//  {
+//    case 1: // Initial N's option 1: equilibrium approach
+//		{
+//
+//		}
+//
+//		case 2: // Initial N's option 2: estimate one parameter per size-class
+//  	{
+//
+//  	}
+//
+//  }
+
+
 
 	
 	
@@ -767,31 +837,35 @@ FUNCTION calc_initial_numbers_at_length
 
 
 
-  /**
-   * @brief Update numbers-at-length
-   * @author Steve Martell
-   */
+	/**
+	 * @brief Update numbers-at-length
+	 * @author Steve Martell
+	 * @details  Numbers at length are propagated each year for each sex based on the 
+	 * size transition matrix and a vector of size-specifc survival rates. The columns
+	 * of the size-transition matrix are multiplied by the size-specific survival rate
+	 * (a sclaer).  New recruits are added based on the estimated aveerage recruitment and 
+	 * annual deviate, multiplied by a vector of size-proportions (rec_sdd).
+	 */
 FUNCTION update_population_numbers_at_length
 	int h,i,l;
-	dvar_matrix A(1,nclass,1,nclass);
-	
+	dvar_matrix At(1,nclass,1,nclass);
 
 	for( h = 1; h <= nsex; h++ )
 	{
 		for( i = syr; i <= nyr; i++ )
 		{
-			A = size_transition(h);
+			At = size_transition(h);
 			for( l = 1; l <= nclass; l++ )
 			{
-				A(l) = elem_prod( A(l), S(h)(i) );
+				//A(l) = elem_prod( A(l), S(h)(i) );
+				At(l) *= S(h)(i)(l);
 			}
-
-			N(h)(i+1)  = 0.5 * mfexp(logRbar) * rec_sdd;
-			N(h)(i+1) += A * N(h)(i);
+			recruits(i) = mfexp(logRbar+rec_dev(i));
+			N(h)(i+1)   = (0.5 * recruits(i)) * rec_sdd;
+			N(h)(i+1)   += N(h)(i) * At;
 		}
 	}
-	//COUT(N(nsex));
-	//exit(1);
+	
 
 
 
@@ -800,14 +874,14 @@ FUNCTION update_population_numbers_at_length
 
 
 
-  /**
-   * @brief Calculate predicted catch observations
-   * @details The function uses the Baranov catch equation to predict the retained
-   * and discarded catch.
-   * 
-   * @param  [description]
-   * @return [description]
-   */
+	/**
+	 * @brief Calculate predicted catch observations
+	 * @details The function uses the Baranov catch equation to predict the retained
+	 * and discarded catch.
+	 * 
+	 * @param  [description]
+	 * @return [description]
+	 */
 FUNCTION calc_predicted_catch
 	int h,i,j,k;
 	int type,unit;
@@ -880,14 +954,14 @@ FUNCTION calc_predicted_catch
 
 
 
-  /**
-   * @brief Calculate predicted relative abundance and residuals
-   * @author Steve Martell
-   * 
-   * @details This function uses the conditional mle for q to scale
-   * the population to the relative abundance index.  Assumed errors in 
-   * relative abundance are lognormal.
-   */
+	/**
+	 * @brief Calculate predicted relative abundance and residuals
+	 * @author Steve Martell
+	 * 
+	 * @details This function uses the conditional mle for q to scale
+	 * the population to the relative abundance index.  Assumed errors in 
+	 * relative abundance are lognormal.
+	 */
 FUNCTION calc_relative_abundance
 	int g,h,i,j,k;
 	int unit;
@@ -933,22 +1007,22 @@ FUNCTION calc_relative_abundance
 
 
 
-  /**
-   * @brief Calculate predicted size composition data.
-   * @details   Predicted size composition data are given in proportions.
-   * Size composition strata:
-   * 	- sex
-   * 	- type (retained or discard)
-   * 	- shell condition
-   * 	- mature or immature
-   * 
-   * NB Sitting in a campground on the Orgeon Coast writing this code,
-   * with baby Tabitha sleeping on my back.
-   * 
-   * TODO: 
-   * 	- add pointers for shell type.
-   * 	- add pointers for maturity state.
-   */
+	/**
+	 * @brief Calculate predicted size composition data.
+	 * @details   Predicted size composition data are given in proportions.
+	 * Size composition strata:
+	 * 	- sex
+	 * 	- type (retained or discard)
+	 * 	- shell condition
+	 * 	- mature or immature
+	 * 
+	 * NB Sitting in a campground on the Orgeon Coast writing this code,
+	 * with baby Tabitha sleeping on my back.
+	 * 
+	 * TODO: 
+	 * 	- add pointers for shell type.
+	 * 	- add pointers for maturity state.
+	 */
 FUNCTION calc_predicted_composition
 	int h,i,j,k;
 	int type,shell,maturity;
@@ -1020,20 +1094,20 @@ FUNCTION calc_predicted_composition
 
 
 
-  /**
-   * @brief calculate objective function
-   * @details 
-   * 
-   * Likelihood components
-   * 	-# likelihood of the catch data (assume lognormal error)
-   * 	-# likelihood of relative abundance data
-   * 	-# likelihood of size composition data
-   * 
-   * Penalty components
-   * 	-# Penalty on log_fdev to ensure they sum to zero.
-   * 	-# Penalty to regularize values of log_fbar.
-   * 
-   */
+	/**
+	 * @brief calculate objective function
+	 * @details 
+	 * 
+	 * Likelihood components
+	 * 	-# likelihood of the catch data (assume lognormal error)
+	 * 	-# likelihood of relative abundance data
+	 * 	-# likelihood of size composition data
+	 * 
+	 * Penalty components
+	 * 	-# Penalty on log_fdev to ensure they sum to zero.
+	 * 	-# Penalty to regularize values of log_fbar.
+	 * 
+	 */
 FUNCTION calc_objective_function
 
 	// |---------------------------------------------------------------------------------|
@@ -1053,16 +1127,23 @@ FUNCTION calc_objective_function
 		nloglike(2) += dnorm(res_cpue(k),cpue_cv(k));
 	}
 
+
+
+
+
 	// 3) Likelihood for size composition data.
 	double minP = 0;
 	double variance;
 	for(int ii = 1; ii <= nSizeComps; ii++)
 	{
-		dmatrix O     = d3_obs_size_comps(ii);
+		dmatrix     O = d3_obs_size_comps(ii);
 		dvar_matrix P = d3_pre_size_comps(ii);
 		nloglike(3)  += dmultinom(O,P,d3_res_size_comps(ii),variance,minP);
-		COUT(nloglike(3));
 	}
+
+
+
+
 
 	// |---------------------------------------------------------------------------------|
 	// | PENALTIES AND CONSTRAINTS                                                       |
@@ -1092,10 +1173,10 @@ FUNCTION calc_objective_function
 
 
 REPORT_SECTION
-  REPORT(mod_yrs);
-  REPORT(size_breaks);
-  REPORT(nloglike);
-  REPORT(nlogPenalty);
+	REPORT(mod_yrs);
+	REPORT(size_breaks);
+	REPORT(nloglike);
+	REPORT(nlogPenalty);
 	REPORT(obs_catch);
 	REPORT(pre_catch);
 	REPORT(res_catch);
@@ -1107,8 +1188,12 @@ REPORT_SECTION
 	REPORT(log_slx_discard);
 	REPORT(d3_obs_size_comps);
 	REPORT(d3_pre_size_comps);
-
-  REPORT(N);
+	REPORT(ft);
+	REPORT(rec_sdd);
+	REPORT(size_transition);
+	REPORT(rec_dev);
+	REPORT(recruits);
+	REPORT(N);
 
 
 
@@ -1129,7 +1214,8 @@ GLOBALS_SECTION
 	Prints name and value of \a object on ADMB report %ofstream file.
 	*/
 	#undef REPORT
-	#define REPORT(object) report << #object "\n" << object << endl;
+	#define REPORT(object) report << #object "\n" << setw(8) \
+	<< setprecision(4) << setfixed() << object << endl;
 
 	/**
 	 *
@@ -1140,23 +1226,23 @@ GLOBALS_SECTION
 	 #undef COUT
 	 #define COUT(object) cout << #object "\n" << setw(6) \
 	 << setprecision(3) << setfixed() << object << endl;
-  /**
+	/**
 
-  \def ECHO(object)
-  Prints name and value of \a object on echoinput %ofstream file.
-  */
+	\def ECHO(object)
+	Prints name and value of \a object on echoinput %ofstream file.
+	*/
 	 #undef ECHO
-   #define ECHO(object) echoinput << #object << "\n" << object << endl;
-   // #define ECHO(object,text) echoinput << object << "\t" << text << endl;
+	 #define ECHO(object) echoinput << #object << "\n" << object << endl;
+	 // #define ECHO(object,text) echoinput << object << "\t" << text << endl;
  
-   /**
-   \def check(object)
-   Prints name and value of \a object on checkfile %ofstream output file.
-   */
-   #define check(object) checkfile << #object << "\n" << object << endl;
-   // Open output files using ofstream
-   ofstream echoinput("echoinput.rep");
-   ofstream checkfile("checkfile.rep");
+	 /**
+	 \def check(object)
+	 Prints name and value of \a object on checkfile %ofstream output file.
+	 */
+	 #define check(object) checkfile << #object << "\n" << object << endl;
+	 // Open output files using ofstream
+	 ofstream echoinput("echoinput.rep");
+	 ofstream checkfile("checkfile.rep");
 
 TOP_OF_MAIN_SECTION
 	time(&start);
