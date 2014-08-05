@@ -37,7 +37,7 @@ A general user-guide to the program is under development in parallel with the Gm
 
 ## Simulation Mode
 
-A simulation-estimation test can be performed with Gmacs, by using the `gmacs -sim` flag. For example, try `gmacs -sim 123`.
+A simulation-estimation procedure can be performed with Gmacs, by using the `gmacs -sim` flag. For example, try `gmacs -sim 123`, where 123 is a random number seed.
 
 ## R Package for Gmacs
 An R package, called `gmr` is under development for Gmacs: a full pilot version is intended for release in September 2014, timed to coincide with the next stable release of Gmacs. Current development versions of the package can be downloaded from Github directly through R, see https://github.com/seacode/gmr for details.
