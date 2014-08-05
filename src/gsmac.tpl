@@ -20,6 +20,23 @@
 // ==================================================================================== //
 
 DATA_SECTION
+	
+	// |---------------------|
+	// | SIMULATION CONTROLS |
+	// |---------------------|
+	int simflag;
+	int rseed
+	LOC_CALCS
+		simflag = 0;
+		rseed   = 0;
+		int opt,on;
+		if((on=option_match(ad_comm::argc,ad_comm::argv,"-sim",opt))>-1)
+		{
+			simflag = 1;
+			rseed   = atoi(ad_comm::argv[on+1]);
+		}
+	END_CALCS
+
 	// |------------------------|
 	// | DATA AND CONTROL FILES |
 	// |------------------------|
@@ -34,8 +51,6 @@ DATA_SECTION
 
 	init_int syr;   ///> initial year
 	init_int nyr;   ///> terminal year
-	vector mod_yrs(syr,nyr) ///> Model years
-	!! mod_yrs.fill_seqadd(syr,1);
 	init_number jstep;  ///> time step (years)
 	init_int nfleet;  ///> number of gears
 	init_int nsex;    ///> number of sexes
@@ -47,7 +62,7 @@ DATA_SECTION
 	init_vector size_breaks(1,nclass+1);
 	vector       mid_points(1,nclass);
 	!! mid_points = size_breaks(1,nclass) + first_difference(size_breaks);
-	!! ECHO(syr); ECHO(nyr); ECHO(mod_yrs);ECHO(nfleet); ECHO(nsex); ECHO(nshell);ECHO(nmature); ECHO(nclass);
+	!! ECHO(syr); ECHO(nyr); ECHO(nfleet); ECHO(nsex); ECHO(nshell);ECHO(nmature); ECHO(nclass);
 
 	// Initialize class-link matrix and fill as necessary:
 	matrix class_link(1,nclass,1,2);      ///< Matrix of links between model and data size-classes
@@ -99,6 +114,11 @@ DATA_SECTION
 		}
 	END_CALCS
 	!! ECHO(lw_alfa); ECHO(lw_beta); ECHO(mean_wt);
+
+	// |-------------------------------|
+	// | FECUNDITY FOR MMB CALCULATION |
+	// |-------------------------------|
+	init_vector fecundity(1,nclass);
 
 	// |-------------|
 	// | FLEET NAMES |
@@ -156,16 +176,23 @@ DATA_SECTION
 		ECHO(obs_cpue); ECHO(cpue_cv); 
 	END_CALCS
 
+	// |-----------------------|
+	// | SIZE COMPOSITION DATA |
+	// |-----------------------|
+
 	init_int nSizeComps;
 	init_ivector nSizeCompRows(1,nSizeComps);
 	init_ivector nSizeCompCols(1,nSizeComps);
 	init_3darray d3_SizeComps(1,nSizeComps,1,nSizeCompRows,-7,nSizeCompCols);
 	3darray d3_obs_size_comps(1,nSizeComps,1,nSizeCompRows,1,nSizeCompCols);
+	3darray d3_res_size_comps(1,nSizeComps,1,nSizeCompRows,1,nSizeCompCols);
+	matrix size_comp_sample_size(1,nSizeComps,1,nSizeCompRows);
 	LOC_CALCS
 		for(int k = 1; k <= nSizeComps; k++ )
 		{
 			dmatrix tmp = trans(d3_SizeComps(k)).sub(1,nSizeCompCols(k));
 			d3_obs_size_comps(k) = trans(tmp);
+			size_comp_sample_size(k) = column(d3_SizeComps(k),0);
 		}
 		ECHO(nSizeComps); 
 		ECHO(d3_obs_size_comps); 
@@ -177,7 +204,7 @@ DATA_SECTION
 	init_int eof;
 	!! if (eof != 9999) {cout<<"Error reading data"<<endl; exit(1);}
 
-
+	
 
 
 
@@ -305,7 +332,7 @@ DATA_SECTION
 		bInitializeUnfished = int(model_controls(3));
 	END_CALCS
 	!! cout<<"end of control section"<<endl;
-	
+
 	int nf;
 	!! nf = 0;
 
@@ -313,27 +340,30 @@ DATA_SECTION
 INITIALIZATION_SECTION
 	theta theta_ival;
 	log_fbar  log_pen_fbar;
-	alpha     3.733;
-	beta      0.02;
-	scale    15.1;
+	alpha     16.56211;  //16.56211     -0.05496
+	beta      0.05496;
+	scale    12.1;
 	
 
 PARAMETER_SECTION
+	
 	// Leading parameters
-	//      M = theta(1)
-	// ln(Ro) = theta(2)
-	// ra     = theta(3)
-	// rbeta  = theta(4)
+	//      M   = theta(1)
+	// ln(Ro)   = theta(2)
+	// ln(R1)   = theta(3)
+	// ln(Rbar) = theta(4)
+	// ra       = theta(5)
+	// rbeta    = theta(6)
 	init_bounded_number_vector theta(1,ntheta,theta_lb,theta_ub,theta_phz);
 
 	// Molt increment parameters
-	init_bounded_vector alpha(1,nsex,0,100,-1);
+	init_bounded_vector alpha(1,nsex,0,20.,-1);
 	init_bounded_vector beta(1,nsex,0,10,-1);
-	init_bounded_vector scale(1,nsex,1,100,-1);
+	init_bounded_vector scale(1,nsex,1,20.,-1);
 
 	// Molt probability parameters
-	init_bounded_vector molt_mu(1,nsex,0,200,-1);
-	init_bounded_vector molt_cv(1,nsex,0,1,-1);
+	init_bounded_vector molt_mu(1,nsex,0,100,-1);
+	init_bounded_vector molt_cv(1,nsex,0,50,-1);
 
 	// Selectivity parameters
 	init_bounded_matrix_vector log_slx_pars(1,nslx,1,slx_rows,1,slx_cols,-25,25,slx_phzm);
@@ -348,29 +378,35 @@ PARAMETER_SECTION
 					log_slx_pars(k)(j,2) = log(slx_stdv(k));
 				}
 			}
+		//COUT(log_slx_pars(k));
 		}
 	END_CALCS
 
 	// Fishing mortality rate parameters
 	init_number_vector log_fbar(1,nfleet,f_phz);
-
 	init_vector_vector log_fdev(1,nfleet,1,nFparams,f_phz);
-
 
 	// Recruitment deviation parameters
 	init_bounded_dev_vector rec_ini(1,nclass,-5.0,5.0,rdv_phz);  ///> initial size devs
-	init_bounded_dev_vector rec_dev(syr,nyr,-15.0,15.0,rdv_phz); ///> recruitment deviations
+	init_bounded_dev_vector rec_dev(syr+1,nyr,-5.0,5.0,rdv_phz); ///> recruitment deviations
 
-	vector nloglike(1,3);
-	vector nlogPenalty(1,2);
+
+	// Effective sample size parameter for multinomial
+	init_vector log_vn(1,nSizeComps,4);
+
+	vector nloglike(1,4);
+	vector nlogPenalty(1,4);
+	vector priorDensity(1,ntheta);
+
 	objective_function_value objfun;
 
 	number M0;        ///> natural mortality rate
 	number logR0;     ///> logarithm of unfished recruits.
 	number logRbar;   ///> logarithm of average recruits(syr+1,nyr)
 	number logRini;   ///> logarithm of initial recruitment(syr).
-	number ra;        ///> shape parameter for recruitment distribution
-	number rbeta;     ///> rate parameter for recruitment distribution
+	number ra;				///> shape parameter for recruitment distribution
+	number rbeta;			///> rate parameter for recruitment distribution
+	number logSigmaR; ///> standard deviation of recruitment deviations.
 
 	vector rec_sdd(1,nclass);     ///> recruitment size_density_distribution
 	vector recruits(syr,nyr);     ///> vector of estimated recruits
@@ -400,14 +436,41 @@ PARAMETER_SECTION
 	4darray log_slx_retaind(1,nfleet,1,nsex,syr,nyr,1,nclass);
 	4darray log_slx_discard(1,nfleet,1,nsex,syr,nyr,1,nclass);
 
-	sdreport_vector sd_recruits(syr,nyr);
+	sdreport_vector sd_log_recruits(syr,nyr);
+	sdreport_vector sd_log_mmb(syr,nyr);
+
+
+	
+
+PRELIMINARY_CALCS_SECTION
+	if( simflag )
+	{
+		if(!global_parfile)
+		{
+			cerr << "Must have a gsmac.pin file to use the -sim command line option"<<endl;
+			ad_exit(1);
+		}
+		cout<<"|———————————————————————————————————————————|"<<endl;
+		cout<<"|*** RUNNING SIMULATION WITH RSEED = "<<rseed<<" ***|"<<endl;
+		cout<<"|———————————————————————————————————————————|"<<endl;
+		
+		simulation_model();
+		//exit(1);
+	}
+	// Must declare the abstract base class in GLOBALS_SECTION
+	// acl::negativeLogLikelihood *agecomplike;
+	// agecomplike = new acl::multinomial(d3_obs_size_comps(1));
+	
 
 PROCEDURE_SECTION
+	// Initialize model parameters
 	initialize_model_parameters();
-
+	if( verbose ) cout<<"Ok after initializing model parameters ..."<<endl;
+	
 	// Fishing fleet dynamics ...
 	calc_selectivities();
 	calc_fishing_mortality();
+	if( verbose ) cout<<"Ok after fleet dynamics ..."<<endl;
 
 	// Population dynamics ...
 	calc_growth_increments();
@@ -418,26 +481,40 @@ PROCEDURE_SECTION
 	calc_recruitment_size_distribution();
 	calc_initial_numbers_at_length();
 	update_population_numbers_at_length();
+	if( verbose ) cout<<"Ok after population dynamcs ..."<<endl;
 
 	// observation models ...
 	calc_predicted_catch();
 	calc_relative_abundance();
 	calc_predicted_composition();
+	if( verbose ) cout<<"Ok after observation models ..."<<endl;
 
 	// objective function ...
+	calculate_prior_densities();
 	calc_objective_function();
-
+	if( verbose ) cout<<"Ok after objective function ..."<<endl;
 	// sd_report variables
-	if( last_phase() ) calc_sdreport();
+	if( last_phase() ) 
+	{
+		calc_sdreport();
+	}
 	nf++;
-	//COUT(nf);
+
+
+
 
 
 	/**
 	 * @brief calculate sdreport variables in final phase
 	 */
 FUNCTION calc_sdreport
-	sd_recruits = recruits;
+	sd_log_recruits = log(recruits);
+	int h = 1;
+	for(int i = syr; i <= nyr; i++ )
+	{
+		sd_log_mmb(i) = log( N(h)(i) * fecundity );
+	}
+	
 	
 
 	/**
@@ -446,12 +523,13 @@ FUNCTION calc_sdreport
 	 */
 FUNCTION initialize_model_parameters
 	 // Get parameters from theta control matrix:
-	M0      = theta(1);
-	logR0   = theta(2);
-	logRini = theta(3);
-	logRbar = theta(4);
-	ra      = theta(5);
-	rbeta   = theta(6);
+	M0        = theta(1);
+	logR0     = theta(2);
+	logRini   = theta(3);
+	logRbar   = theta(4);
+	ra        = theta(5);
+	rbeta     = theta(6);
+	logSigmaR = theta(7);
 
 
 	/**
@@ -538,7 +616,7 @@ FUNCTION calc_selectivities
 				block = 1;
 			} 
 		}
-
+		//if(k<=nfleet)COUT(log_slx_capture(k)(1)(syr));
 		// delete pointers
 		delete *pSLX;
 	}
@@ -589,8 +667,9 @@ FUNCTION calc_fishing_mortality
 		}
 	}
 	//COUT(F(1)(syr));
-	//COUT(log_fbar(1));
+	//COUT(log_fbar);
 	//COUT(log_fdev(1));
+	//COUT(logRbar);
 
 	//COUT(log_fbar);
 	
@@ -709,6 +788,7 @@ FUNCTION calc_total_mortality
 	{
 		 Z(h) = M(h) + F(h);
 		 S(h) = mfexp(-Z(h));
+		 //COUT(F(h)(syr));
 	}
 
 
@@ -784,6 +864,7 @@ FUNCTION calc_initial_numbers_at_length
 	{
 		log_initial_recruits = logRini;
 	}
+	recruits(syr) = exp(log_initial_recruits);
 	dvar_vector rt = 0.5 * mfexp( log_initial_recruits ) * rec_sdd;
 
 	// Equilibrium soln.
@@ -796,7 +877,6 @@ FUNCTION calc_initial_numbers_at_length
 		At = size_transition(h);
 		for(int l = 1; l <= nclass; l++ )
 		{
-			//A(l) = elem_prod( A(l), S(h)(syr) );
 			At(l) *= S(h)(syr)(l);
 		}
 		A = trans(At);
@@ -804,6 +884,7 @@ FUNCTION calc_initial_numbers_at_length
 		N(h)(syr) = elem_prod(x,exp(rec_ini));
 	}
 	
+
 //  // Specification for initial numbers option (TODO: make part of control file)
 //  int init_n = 1;
 //
@@ -821,17 +902,6 @@ FUNCTION calc_initial_numbers_at_length
 //
 //  }
 
-
-
-	
-	
-
-
-
-
-
-
-
 	/**
 	 * @brief Update numbers-at-length
 	 * @author Steve Martell
@@ -844,10 +914,14 @@ FUNCTION calc_initial_numbers_at_length
 FUNCTION update_population_numbers_at_length
 	int h,i,l;
 	dvar_matrix At(1,nclass,1,nclass);
+	recruits(syr+1,nyr) = mfexp(logRbar);
 
-	for( h = 1; h <= nsex; h++ )
+	for( i = syr; i <= nyr; i++ )
 	{
-		for( i = syr; i <= nyr; i++ )
+		if( i > syr ) 
+			recruits(i) *= mfexp(rec_dev(i));
+
+		for( h = 1; h <= nsex; h++ )
 		{
 			At = size_transition(h);
 			for( l = 1; l <= nclass; l++ )
@@ -855,7 +929,6 @@ FUNCTION update_population_numbers_at_length
 				//A(l) = elem_prod( A(l), S(h)(i) );
 				At(l) *= S(h)(i)(l);
 			}
-			recruits(i) = mfexp(logRbar+rec_dev(i));
 			N(h)(i+1)   = (0.5 * recruits(i)) * rec_sdd;
 			N(h)(i+1)   += N(h)(i) * At;
 		}
@@ -1040,11 +1113,11 @@ FUNCTION calc_predicted_composition
 
 			if(h) // sex specific
 			{
-				dvar_vector sel = log_slx_capture(k)(h)(i);
-				dvar_vector ret = log_slx_retaind(k)(h)(i);
-				dvar_vector dis = log_slx_discard(k)(h)(i);
+				dvar_vector sel = exp(log_slx_capture(k)(h)(i));
+				dvar_vector ret = exp(log_slx_retaind(k)(h)(i));
+				dvar_vector dis = exp(log_slx_discard(k)(h)(i));
 				dvar_vector tmp = N(h)(i);
-
+			
 				switch (type)
 				{
 					case 1:
@@ -1063,9 +1136,9 @@ FUNCTION calc_predicted_composition
 			{
 				for( h = 1; h <= nsex; h++ )
 				{
-					dvar_vector sel = log_slx_capture(k)(h)(i);
-					dvar_vector ret = log_slx_retaind(k)(h)(i);
-					dvar_vector dis = log_slx_discard(k)(h)(i);
+					dvar_vector sel = exp(log_slx_capture(k)(h)(i));
+					dvar_vector ret = exp(log_slx_retaind(k)(h)(i));
+					dvar_vector dis = exp(log_slx_discard(k)(h)(i));
 					dvar_vector tmp = N(h)(i);
 
 					switch (type)
@@ -1085,6 +1158,66 @@ FUNCTION calc_predicted_composition
 			d3_pre_size_comps(ii)(jj) = dNtmp / sum(dNtmp);
 		}
 	}
+
+
+
+
+	/**
+	 * @brief Calculate prior density functions for leading parameters.
+	 * @details 
+	 * 	- case 0 is a uniform density between the lower and upper bounds.
+	 * 	- case 1 is a normal density with mean = p1 and sd = p2
+	 * 	- case 2 is a lognormal density with mean = log(p1) and sd = p2
+	 * 	- case 3 is a beta density bounded between lb-ub with p1 and p2 as alpha & beta
+	 * 	- case 4 is a gamma density with parameters p1 and p2.
+	 */
+FUNCTION calculate_prior_densities
+	double p1,p2;
+	double lb,ub;
+	priorDensity.initialize();
+	
+	for(int i = 1; i <= ntheta; i++ )
+	{
+		int priorType = theta_control(i,5);
+		p1 = theta_control(i,6);
+		p2 = theta_control(i,7);
+		switch(priorType)
+		{
+			// uniform
+			case 0: 
+				p1 = theta_control(i,2);
+				p2 = theta_control(i,3);
+				priorDensity(i) = -log(1.0 / (p2-p1));
+			break;
+
+			// normal
+			case 1:
+				priorDensity(i) = dnorm(theta(i),p1,p2);
+			break;
+
+			// lognormal
+			case 2:
+				priorDensity(i) = dlnorm(theta(i),log(p1),p2);
+			break;
+
+			// beta
+			case 3:
+				lb = theta_control(i,2);
+				ub = theta_control(i,3);
+				priorDensity(i) = dbeta((theta(i)-lb)/(ub-lb),p1,p2);
+			break;
+
+			// gamma
+			case 4:
+				priorDensity(i) = dgamma(theta(i),p1,p2);
+			break;
+		}
+	}
+
+
+
+
+
 
 
 
@@ -1111,7 +1244,8 @@ FUNCTION calc_objective_function
 	nloglike.initialize();
 	
 	// 1) Likelihood of the catch data.
-	nloglike(1) = dnorm(res_catch,catch_cv);
+	dvector catch_sd = sqrt(log(1.0+square(catch_cv)));
+	nloglike(1) = dnorm(res_catch,catch_sd);
 
 
 
@@ -1119,7 +1253,8 @@ FUNCTION calc_objective_function
 	// 2) Likelihood of the relative abundance data.
 	for(int k = 1; k <= nSurveys; k++ )
 	{
-		nloglike(2) += dnorm(res_cpue(k),cpue_cv(k));
+		dvector cpue_sd = sqrt(log(1.0 + square(cpue_cv(k))));
+		nloglike(2) += dnorm(res_cpue(k),cpue_sd(k));
 	}
 
 
@@ -1127,15 +1262,33 @@ FUNCTION calc_objective_function
 
 
 	// 3) Likelihood for size composition data.
-	double minP = 0;
-	double variance;
 	for(int ii = 1; ii <= nSizeComps; ii++)
 	{
 		dmatrix     O = d3_obs_size_comps(ii);
 		dvar_matrix P = d3_pre_size_comps(ii);
-		nloglike(3)  += dmultinom(O,P,d3_res_size_comps(ii),variance,minP);
+
+
+		acl::negativeLogLikelihood *ploglike;
+		ploglike = new acl::multinomial(O,true);
+		nloglike(3) 				 += ploglike->nloglike(log_vn(ii),P);
+		d3_res_size_comps(ii) = ploglike->residual(log_vn(ii),P);
+		
+
+		//likelihoods::nloglike myfun(O,P);
+		//nloglike(3)  += myfun.multinomial(size_comp_sample_size(ii));
+
+		//if(last_phase())
+		//{
+		//	d3_res_size_comps(ii) = myfun.residuals(size_comp_sample_size(ii));
+		//}
+
+		//nloglike(3)  += myfun.dmvlogistic();
 	}
 
+
+	// 4) Likelihood for recruitment deviations.
+	dvariable sigR = mfexp(logSigmaR);
+	nloglike(4)    = dnorm(rec_dev,sigR);
 
 
 
@@ -1163,41 +1316,153 @@ FUNCTION calc_objective_function
 
 
 
-	objfun = sum(nloglike) + sum(nlogPenalty);
+	objfun = sum(nloglike) + sum(nlogPenalty) + sum(priorDensity);
 
 
+  /**
+   * @brief Simulation model
+   * @details Uses many of the same routines as the assessment
+   * model, over-writes the observed data in memory with simulated 
+   * data.
+   * 
+   */
+FUNCTION simulation_model
+	// random number generator
+	random_number_generator rng(rseed);
+	
+	// Initialize model parameters
+	initialize_model_parameters();
+
+	// Fishing fleet dynamics ...
+	calc_selectivities();
+	calc_fishing_mortality();
+
+	
+	dvector drec_dev(syr+1,nyr);
+	drec_dev.fill_randn(rng);
+	rec_dev = exp(logSigmaR) * drec_dev;
+
+	// Population dynamics ...
+	calc_growth_increments();
+	calc_size_transition_matrix();
+	calc_natural_mortality();
+	calc_total_mortality();
+	calc_molting_probability();
+	calc_recruitment_size_distribution();
+	calc_initial_numbers_at_length();
+	update_population_numbers_at_length();
+	
+
+	// observation models ...
+	calc_predicted_catch();
+	calc_relative_abundance();
+	calc_predicted_composition();
+
+	
+	// add observation errors to catch.
+	dvector err_catch(1,nCatchRows);
+	dvector catch_sd = sqrt(log(1.0 + square(catch_cv)));
+	err_catch.fill_randn(rng);
+	obs_catch = value(pre_catch);
+	err_catch = elem_prod(catch_sd,err_catch) - 0.5*square(catch_sd);
+	obs_catch = elem_prod(obs_catch,exp(err_catch));
+	
+
+	// add observation errors to cpue. & fill in dSurveyData column 5
+	dmatrix err_cpue(1,nSurveys,1,nSurveyRows);
+	dmatrix cpue_sd = sqrt(log(1.0 + square(cpue_cv)));
+	err_cpue.fill_randn(rng);
+	obs_cpue = value(pre_cpue);
+	err_cpue = elem_prod(cpue_sd,err_cpue) - 0.5*square(cpue_sd);
+	obs_cpue = elem_prod(obs_cpue,exp(err_cpue));
+	for(int k = 1; k <= nSurveys; k++ )
+	{
+		for(int i = 1; i <= nSurveyRows(k); i++ )
+		{
+			dSurveyData(k)(i,5) = obs_cpue(k,i);
+		}
+	}
+	
+
+	// add sampling errors to size-composition.
+	// 3darray d3_obs_size_comps(1,nSizeComps,1,nSizeCompRows,1,nSizeCompCols);
+	double tau;
+	for(int k = 1; k <= nSizeComps; k++ )
+	{
+		for(int i = 1; i <= nSizeCompRows(k); i++ )
+		{
+			tau = sqrt(1.0 / size_comp_sample_size(k)(i));
+			dvector p = value(d3_pre_size_comps(k)(i)); 
+			d3_obs_size_comps(k)(i) = rmvlogistic(p,tau,rseed+k+i);
+		}
+	}
+	// COUT(d3_pre_size_comps(1)(1));
+	// COUT(d3_obs_size_comps(1)(1));
 
 REPORT_SECTION
+
+	dvector mod_yrs(syr,nyr); 
+	mod_yrs.fill_seqadd(syr,1);
+
 	REPORT(mod_yrs);
-	REPORT(size_breaks);
+	REPORT(mid_points);
 	REPORT(nloglike);
 	REPORT(nlogPenalty);
+	REPORT(dCatchData);
 	REPORT(obs_catch);
 	REPORT(pre_catch);
 	REPORT(res_catch);
+	REPORT(dSurveyData);
 	REPORT(obs_cpue);
 	REPORT(pre_cpue);
 	REPORT(res_cpue);
 	REPORT(log_slx_capture);
 	REPORT(log_slx_retaind);
 	REPORT(log_slx_discard);
+	REPORT(d3_SizeComps);
 	REPORT(d3_obs_size_comps);
 	REPORT(d3_pre_size_comps);
+	REPORT(d3_res_size_comps);
 	REPORT(ft);
 	REPORT(rec_sdd);
 	REPORT(size_transition);
 	REPORT(rec_dev);
 	REPORT(recruits);
 	REPORT(N);
+	dvector mmb = calc_mmb();
+	REPORT(mmb);
 
 
+  /**
+   * @brief Calculate mature male biomass
+   * @details Calculate mature male biomass based on numbers N array.
+   * 
+   * TODO correct for timing of when the MMB is calculated
+   */
+FUNCTION dvector calc_mmb()
+	dvector mmb(syr,nyr);
+	mmb.initialize();
+
+	for(int i = syr; i <= nyr; i++ )
+	{
+		int h = 1;
+		mmb(i) = value(N(h)(i)) * fecundity;
+	}
+	return(mmb);
+
+RUNTIME_SECTION
+    maximum_function_evaluations 500,  500,   1500, 25000, 25000
+    convergence_criteria        1.e-4, 1.e-4, 1.e-4, 1.e-4, 1.e-4, 
 
 
 GLOBALS_SECTION
 	#include <admodel.h>
 	#include <time.h>
 	#include <contrib.h>
+	#include "nloglike.h"
 	#include "../../CSTAR/include/cstar.h"
+
+	// acl::negativeLogLikelihood *agecomplike;
 
 	time_t start,finish;
 	long hour,minute,second;
@@ -1247,3 +1512,20 @@ TOP_OF_MAIN_SECTION
 	gradient_structure::set_MAX_NVAR_OFFSET(5000);
 	gradient_structure::set_NUM_DEPENDENT_VARIABLES(5000);
 	gradient_structure::set_MAX_DLINKS(50000); 
+
+
+FINAL_SECTION
+	//  Print run time statistics to the screen.
+	time(&finish);
+	elapsed_time=difftime(finish,start);
+	hour=long(elapsed_time)/3600;
+	minute=long(elapsed_time)%3600/60;
+	second=(long(elapsed_time)%3600)%60;
+	cout<<endl<<endl<<"*******************************************"<<endl;
+	cout<<endl<<endl<<"———————————————————————————————————————————"<<endl;
+	cout<<"--Start time: "<<ctime(&start)<<endl;
+	cout<<"--Finish time: "<<ctime(&finish)<<endl;
+	cout<<"--Runtime: ";
+	cout<<hour<<" hours, "<<minute<<" minutes, "<<second<<" seconds"<<endl;
+	cout<<"--Number of function evaluations: "<<nf<<endl;
+	cout<<"*******************************************"<<endl;
