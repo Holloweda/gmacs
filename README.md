@@ -55,7 +55,7 @@ This software is under development and is not yet intended for general use. If y
 - [ ] Perform simulation testing
 - [ ] Update documentation
 	- [ ] Extend existing Doxygen comments and create Doxygen output
-	- [ ] Continue working on Gmacs Wiki, parallel with user-guide
+	- [ ] Continue working on Gmacs Wiki, pdf version = user-guide
 - [ ] Test scripts with simulated data and examples
 
 #### Gmacs Executable
