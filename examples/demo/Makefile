@@ -1,5 +1,9 @@
-EXEC = gsmac
-DIST = ../../src/build/debug/
+EXEC = gmacs
+ifeq ($(OPT),TRUE)
+	DIST = ../../src/build/release/
+else
+	DIST = ../../src/build/debug/
+endif
 ARGS = 
 
 all: run

@@ -1,5 +1,5 @@
 # Name of executable.
-OUTPUT:=gsmac
+OUTPUT:=gmacs
 LIBINCLUDE = ../../CSTAR/build
 # Global source files from current dir.
 SRCS:=$(wildcard *.cpp *.c *.cc *.cxx ) 
@@ -43,7 +43,7 @@ RELEASE_OBJS:=$(addprefix build/release/,$(addsuffix .o,$(BASEFILES)))
 DEPFILES:=$(addprefix build/deps/,$(addsuffix .d,$(BASEFILES)))
 
 # Default to release build.
-all: $(OUTPUT).cpp debug
+all: $(OUTPUT).cpp debug release
 
 $(OUTPUT).cpp: $(OUTPUT).tpl
 	$(ADMB_HOME)/bin/tpl2cpp $(OUTPUT)

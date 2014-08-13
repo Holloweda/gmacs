@@ -8,10 +8,11 @@
  * greater than pmin, and 1-pmin respectively. This is then later
  * used to construct ragged objects to be used in the likelihood functions.
  * @return [description]
+ * @author Steve Martell
  */
 void acl::negativeLogLikelihood::tail_compression()
 {
-	cout<<"Running tail compression"<<endl;
+	// cout<<"Running tail compression"<<endl;
 	double pmin = 0.001;
 	
 
