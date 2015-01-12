@@ -1012,6 +1012,38 @@ FUNCTION calc_fishing_mortality
 	}
 
 
+
+
+	/**
+	 * @brief Compute growth increments 
+	 * @details Presently based on liner form
+	 * 
+	 * @param vSizes is a vector of size data from which to compute predicted values
+	 * @param iSex   is an integer vector indexing sex (1 = male, 2 = female )
+	 * @return dvar_vector of predicted growth increments
+	 */   
+FUNCTION dvar_vector calc_growth_increments(const dvector vSizes, const ivector iSex)
+	{
+	if( vSizes.indexmin() != iSex.indexmin() || vSizes.indexmax() != iSex.indexmax() )
+	{
+		cerr<<"indices don't match..."<<endl;
+		ad_exit(1);
+	}
+	RETURN_ARRAYS_INCREMENT();
+	dvar_vector pMoltInc(1,vSizes.indexmax());
+	pMoltInc.initialize();
+	int h,i;
+	for( i = 1; i <= nGrowthObs; i++ )
+	{
+		h = iSex(i);
+		pMoltInc(i) = alpha(h) - beta(h) * vSizes(i);
+	}
+	RETURN_ARRAYS_DECREMENT();
+	return pMoltInc;
+		
+	}
+
+
 	/**
 	 * @brief Molt increment as a linear function of pre-molt size.
 	 * 
@@ -1029,33 +1061,6 @@ FUNCTION calc_growth_increments
 		}
 	}
 
-
-
-	/**
-	 * @brief Compute growth increments 
-	 * @details Presently based on liner form
-	 * 
-	 * @param vSizes is a vector of size data from which to compute predicted values
-	 * @param iSex   is an integer vector indexing sex (1 = male, 2 = female )
-	 * @return dvar_vector of predicted growth increments
-	 */   
-FUNCTION dvar_vector calc_growth_increments(const dvector vSizes, const ivector iSex)
-	if( vSizes.indexmin() != iSex.indexmin() || vSizes.indexmax() != iSex.indexmax() )
-	{
-		cerr<<"indices don't match..."<<endl;
-		ad_exit(1);
-	}
-	RETURN_ARRAYS_INCREMENT();
-	dvar_vector pMoltInc(1,vSizes.indexmax());
-	pMoltInc.initialize();
-	int h,i;
-	for( i = 1; i <= nGrowthObs; i++ )
-	{
-		h = iSex(i);
-		pMoltInc(i) = alpha(h) - beta(h) * vSizes(i);
-	}
-	RETURN_ARRAYS_DECREMENT();
-	return pMoltInc;
 
 
 	/**
@@ -1104,7 +1109,6 @@ FUNCTION calc_size_transition_matrix
 		for( l = 1; l <= nclass; l++ )
 		{
 			dMeanSizeAfterMolt = (sbi(l) + molt_increment(h)(l)) / gscale(h);
-
 			psi.initialize();
 			for( ll = l; ll <= nclass+1; ll++ )
 			{
@@ -1117,6 +1121,9 @@ FUNCTION calc_size_transition_matrix
 			At(l)(l,nclass)  = At(l)(l,nclass) / sum(At(l));
 		}
 		size_transition(h) = At;
+		
+
+		
 	}
 	
 	// cout<<"End of calc_size_transition_matrix"<<endl;
@@ -2067,17 +2074,14 @@ FUNCTION calc_objective_function
 					ploglike = new acl::robust_multi(O,bCmp);
 			break;
 		}
-
-		// now compute the likelihood.
-		nloglike(3,ii) += ploglike->nloglike(log_effn,P);
-
 		// Compute residuals in the last phase.
 		if(last_phase()) 
 		{
-			d3_res_size_comps(ii) = ploglike->residual(log_effn,P);
+		  d3_res_size_comps(ii) = ploglike->residual(log_effn,P);
 		}
-		
-		
+
+		// now compute the likelihood.
+		nloglike(3,ii) += ploglike->nloglike(log_effn,P);
 
 		
 	}
@@ -2104,11 +2108,8 @@ FUNCTION calc_objective_function
 	// 1) Penalty on log_fdev to ensure they sum to zero 
 	for(int k = 1; k <= nfleet; k++ )
 	{
-		dvariable s    = mean(log_fdev(k));
+		dvariable s     = mean(log_fdev(k));
 		nlogPenalty(1) += 10000.0*s*s;
-
-				  s    = mean(log_fdov(k));
-		nlogPenalty(1) += 10000.0*s*s;             
 	}
 
 
@@ -2252,6 +2253,7 @@ REPORT_SECTION
 	REPORT(log_slx_capture);
 	REPORT(log_slx_retaind);
 	REPORT(log_slx_discard);
+	REPORT(F);
 	REPORT(d3_SizeComps);
 
 	REPORT(d3_obs_size_comps);
@@ -2307,13 +2309,32 @@ REPORT_SECTION
 	}
 	// Print total numbers at length
 	dvar_matrix N_len(syr,nyr+1,1,nclass);
+	dvar_matrix N_mm(syr,nyr+1,1,nclass);
+	dvar_matrix N_males(syr,nyr+1,1,nclass);
+	dvar_matrix N_males_old(syr,nyr+1,1,nclass);
 	N_len.initialize();
+	N_males.initialize();
+	N_mm.initialize();
+	N_males_old.initialize();
 	for (int i=syr;i<=nyr+1;i++)
 	  for (int j=1;j<=nclass;j++)
 	    for (int k=1;k<=n_grp;k++)
+	    {	
+				if (isex(k)==1)
+	    	{
+	    		N_males(i,j) += d3_N(k,i,j);
+					if (ishell(k)==2)
+		    		N_males_old(i,j) += d3_N(k,i,j);
+					if (imature(k)==1)
+		    		N_mm(i,j) += d3_N(k,i,j);
+	    	}
 	    	N_len(i,j) += d3_N(k,i,j);
+	    }
 
 	REPORT(N_len);
+	REPORT(N_mm);
+	REPORT(N_males);
+	REPORT(N_males_old);
 	REPORT(molt_increment);
 	REPORT(dPreMoltSize);
 	REPORT(iMoltIncSex);
